@@ -316,7 +316,7 @@ rpl::producer<> Session::downloaderTaskFinished() const {
 }
 
 bool Session::premium() const {
-	return _user->isPremium();
+	return true;	//_user->isPremium();
 }
 
 bool Session::premiumPossible() const {
