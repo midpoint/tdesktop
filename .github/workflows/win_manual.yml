@@ -1,4 +1,4 @@
-name: Windows.
+name: Windows_Manual
 
 on:
   workflow_dispatch:    # Manual update
