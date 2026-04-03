@@ -30,11 +30,8 @@ jobs:
     strategy:
       matrix:
         arch: [x64]
-        qt: ["", qt6]
+        qt: [""]
         generator: [""]
-        exclude:
-          - arch: arm64
-            qt: ""
 
     env:
       UPLOAD_ARTIFACT: "true"
