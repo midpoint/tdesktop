@@ -1678,7 +1678,12 @@ bool HistoryItem::isIncomingUnreadMedia() const {
 }
 
 void HistoryItem::markMediaAndMentionRead() {
+	const auto wasUnreadMedia = isUnreadMedia();
 	_flags &= ~MessageFlag::MediaIsUnread;
+
+	if (wasUnreadMedia) {
+		invalidateChatListEntry();
+	}
 
 	if (mentionsMe()) {
 		_history->updateChatListEntry();
@@ -3982,7 +3987,8 @@ FullReplyTo HistoryItem::replyTo() const {
 	return result;
 }
 
-void HistoryItem::setText(const TextWithEntities &textWithEntities) {
+void HistoryItem::detectTextLinks(
+		const TextWithEntities &textWithEntities) {
 	for (const auto &entity : textWithEntities.entities) {
 		auto type = entity.type();
 		if (type == EntityType::Url
@@ -3994,6 +4000,10 @@ void HistoryItem::setText(const TextWithEntities &textWithEntities) {
 			break;
 		}
 	}
+}
+
+void HistoryItem::setText(const TextWithEntities &textWithEntities) {
+	detectTextLinks(textWithEntities);
 	setTextValue((_media && _media->consumeMessageText(textWithEntities))
 		? TextWithEntities()
 		: std::move(textWithEntities));
@@ -4010,6 +4020,13 @@ void HistoryItem::setTextValue(TextWithEntities text, bool force) {
 	if (had || force) {
 		history()->owner().requestItemTextRefresh(this);
 	}
+}
+
+void HistoryItem::setTextStreaming(TextWithEntities text) {
+	detectTextLinks(text);
+	_text = std::move(text);
+	RemoveComponents(HistoryMessageTranslation::Bit());
+	history()->owner().requestItemTextRefreshStreaming(this);
 }
 
 bool HistoryItem::inHighlightProcess() const {

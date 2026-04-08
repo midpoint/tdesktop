@@ -377,6 +377,9 @@ private:
 
 	void refreshFromLabel();
 	void refreshCaption();
+	void refreshTimestampDividers(
+		const TextWithEntities &caption,
+		TimeId duration);
 	void refreshMediaViewer();
 	void refreshNavVisibility();
 	void refreshGroupThumbs();
@@ -513,6 +516,11 @@ private:
 		float64 progress,
 		bool nonbright = false) const;
 	[[nodiscard]] bool isSaveMsgShown() const;
+
+	void showChapterIndicator(const QString &name, int direction);
+	void paintChapterContent(Painter &p, QRect outer, QRect clip);
+	[[nodiscard]] bool isChapterShown() const;
+	void updateChapter();
 
 	void updateOverRect(Over state);
 	bool updateOverState(Over newState);
@@ -770,6 +778,16 @@ private:
 	// _saveMsgAnimation -> _saveMsgTimer -> _saveMsgAnimation.
 	Ui::Animations::Simple _saveMsgAnimation;
 	base::Timer _saveMsgTimer;
+
+	QString _chapterText;
+	QRect _chapterRect;
+	Ui::Animations::Simple _chapterAnimation;
+	base::Timer _chapterTimer;
+	struct ChapterArrow {
+		Ui::Animations::Simple animation;
+		int direction = 0;
+	};
+	std::vector<std::unique_ptr<ChapterArrow>> _chapterArrows;
 
 	base::flat_map<Over, crl::time> _animations;
 	base::flat_map<Over, anim::value> _animationOpacities;

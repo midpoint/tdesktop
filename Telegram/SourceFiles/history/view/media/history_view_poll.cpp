@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_cloud_file.h"
 #include "data/data_location.h"
 #include "lang/lang_keys.h"
+#include "lang/lang_tag.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_item_components.h"
@@ -194,12 +195,14 @@ struct PollThumbnailData {
 [[nodiscard]] PollThumbnailData MakePollThumbnail(
 		not_null<PollData*> poll,
 		const PollAnswer &answer,
-		Window::SessionController::MessageContext messageContext);
+		Window::SessionController::MessageContext messageContext,
+		Fn<bool()> paused = nullptr);
 
 [[nodiscard]] PollThumbnailData MakePollThumbnail(
 		not_null<PollData*> poll,
 		const PollMedia &media,
-		Window::SessionController::MessageContext messageContext) {
+		Window::SessionController::MessageContext messageContext,
+		Fn<bool()> paused = nullptr) {
 	auto result = PollThumbnailData();
 	if (!media) {
 		return result;
@@ -216,7 +219,8 @@ struct PollThumbnailData {
 		if (media.document->sticker()) {
 			result.thumbnail = Ui::MakeEmojiThumbnail(
 				&poll->owner(),
-				Data::SerializeCustomEmojiId(media.document));
+				Data::SerializeCustomEmojiId(media.document),
+				paused);
 			result.kind = PollThumbnailKind::Emoji;
 		} else if (media.document->isSong()
 			|| media.document->isVoiceMessage()) {
@@ -288,8 +292,10 @@ struct PollThumbnailData {
 PollThumbnailData MakePollThumbnail(
 		not_null<PollData*> poll,
 		const PollAnswer &answer,
-		Window::SessionController::MessageContext messageContext) {
-	auto result = MakePollThumbnail(poll, answer.media, messageContext);
+		Window::SessionController::MessageContext messageContext,
+		Fn<bool()> paused) {
+	auto result
+		= MakePollThumbnail(poll, answer.media, messageContext, paused);
 	if (result.kind == PollThumbnailKind::Emoji && result.id) {
 		const auto documentId = DocumentId(result.id);
 		const auto option = answer.option;
@@ -362,7 +368,8 @@ struct Poll::Answer {
 		not_null<PollData*> poll,
 		const PollAnswer &original,
 		Window::SessionController::MessageContext messageContext,
-		Fn<void()> repaint);
+		Fn<void()> repaint,
+		Fn<bool()> paused);
 
 	Ui::Text::String text;
 	QByteArray option;
@@ -1460,6 +1467,9 @@ struct Poll::Options : public Poll::Part {
 	[[nodiscard]] int countAnswerContentWidth(
 		const Answer &answer,
 		int innerWidth) const;
+	[[nodiscard]] int countVotesExtraHeight(
+		const Answer &answer,
+		int textWidth) const;
 	[[nodiscard]] int countAnswerHeight(
 		const Answer &answer,
 		int innerWidth) const;
@@ -1499,6 +1509,7 @@ struct Poll::Options : public Poll::Part {
 		int topPadding,
 		int width,
 		int contentWidth,
+		int contentHeight,
 		const PaintContext &context) const;
 	[[nodiscard]] bool checkAnimationStart() const;
 	[[nodiscard]] bool answerVotesChanged() const;
@@ -1729,11 +1740,13 @@ void Poll::Answer::fillMedia(
 		not_null<PollData*> poll,
 		const PollAnswer &original,
 		Window::SessionController::MessageContext messageContext,
-		Fn<void()> repaint) {
+		Fn<void()> repaint,
+		Fn<bool()> paused) {
 	const auto updated = MakePollThumbnail(
 		poll,
 		original,
-		messageContext);
+		messageContext,
+		paused);
 	const auto same = (updated.kind == thumbnailKind)
 		&& (updated.id == thumbnailId)
 		&& (updated.rounded == thumbnailRounded);
@@ -1933,6 +1946,36 @@ int Poll::Options::countAnswerContentWidth(
 	return std::max(1, answerWidth - mediaWidth);
 }
 
+int Poll::Options::countVotesExtraHeight(
+		const Answer &answer,
+		int textWidth) const {
+	if (answer.votesCountString.isEmpty()
+		&& answer.recentVoters.empty()) {
+		return 0;
+	}
+	const auto lineWidths = answer.text.countLineWidths(textWidth);
+	if (lineWidths.empty()) {
+		return 0;
+	}
+	const auto voterCount = int(answer.recentVoters.size());
+	const auto &ust = st::historyPollAnswerUserpics;
+	const auto userpicsWidth = voterCount
+		? (ust.size + (voterCount - 1) * (ust.size - ust.shift))
+		: 0;
+	const auto userpicsExtra = userpicsWidth
+		? (st::historyPollAnswerUserpicsSkip + userpicsWidth)
+		: 0;
+	const auto votesWidth = answer.votesCountWidth
+		+ userpicsExtra
+		+ st::historyPollFillingRight
+		+ st::historyPollPercentSkip;
+	const auto lastLineWidth = lineWidths.back();
+	if (lastLineWidth + votesWidth <= textWidth) {
+		return 0;
+	}
+	return st::normalFont->height;
+}
+
 int Poll::Options::countAnswerHeight(
 		const Answer &answer,
 		int innerWidth) const {
@@ -1941,15 +1984,23 @@ int Poll::Options::countAnswerHeight(
 	const auto &padding = answer.thumbnail
 		? st::historyPollAnswerPadding
 		: st::historyPollAnswerPaddingNoMedia;
-	const auto fillingWithChoice = (_owner->showVotes() && media)
-		? (st::historyPollPercentFont->height
+	const auto textHeight = answer.text.countHeight(textWidth);
+	const auto multiline = (textHeight
+		> st::historyPollPercentFont->height);
+	const auto votesExtra = _owner->showVotes()
+		? countVotesExtraHeight(answer, textWidth)
+		: 0;
+	const auto fillingWithChoice = (_owner->showVotes()
+		&& (media || multiline || votesExtra))
+		? (std::max(textHeight, st::historyPollPercentFont->height)
+			+ votesExtra
 			+ st::historyPollFillingTop
 			+ (st::historyPollFillingHeight
 				+ st::historyPollChoiceRight.height()) / 2)
 		: 0;
 	return padding.top()
 		+ std::max({
-			answer.text.countHeight(textWidth),
+			textHeight,
 			media,
 			fillingWithChoice,
 		})
@@ -1994,7 +2045,11 @@ void Poll::updateTexts() {
 			options,
 			Core::TextContext({
 				.session = &_poll->session(),
-				.repaint = [=] { repaint(); },
+				.repaint = [=] {
+					if (!_parent->delegate()->elementAnimationsPaused()) {
+						repaint();
+					}
+				},
 				.customEmojiLoopLimit = 2,
 			}));
 	}
@@ -2054,7 +2109,11 @@ void Poll::Header::updateDescription() {
 	}
 	const auto context = Core::TextContext({
 		.session = &_owner->_poll->session(),
-		.repaint = [=] { _owner->_parent->customEmojiRepaint(); },
+		.repaint = [=] {
+			if (!_owner->_parent->delegate()->elementAnimationsPaused()) {
+				_owner->_parent->customEmojiRepaint();
+			}
+		},
 		.customEmojiLoopLimit = 2,
 	});
 	_description.setMarkedText(
@@ -2080,7 +2139,11 @@ void Poll::Header::updateSolutionText() {
 		Ui::ItemTextOptions(_owner->_parent->data()),
 		Core::TextContext({
 			.session = &_owner->_poll->session(),
-			.repaint = [=] { _owner->repaint(); },
+			.repaint = [=] {
+				if (!_owner->_parent->delegate()->elementAnimationsPaused()) {
+					_owner->repaint();
+				}
+			},
 		}));
 	InitElementTextPart(_owner->_parent, _solutionText);
 }
@@ -2092,10 +2155,14 @@ void Poll::Header::updateSolutionMedia() {
 		.topicRootId = item->topicRootId(),
 		.monoforumPeerId = item->sublistPeerId(),
 	};
+	const auto paused = [=] {
+		return _owner->_parent->delegate()->elementAnimationsPaused();
+	};
 	const auto updated = MakePollThumbnail(
 		_owner->_poll,
 		_owner->_poll->solutionMedia,
-		messageContext);
+		messageContext,
+		paused);
 	if (!updated.thumbnail) {
 		_solutionMedia = nullptr;
 		_solutionAttach = nullptr;
@@ -2143,10 +2210,14 @@ void Poll::Header::updateAttachedMedia() {
 		.topicRootId = item->topicRootId(),
 		.monoforumPeerId = item->sublistPeerId(),
 	};
+	const auto paused = [=] {
+		return _owner->_parent->delegate()->elementAnimationsPaused();
+	};
 	const auto updated = MakePollThumbnail(
 		_owner->_poll,
 		_owner->_poll->attachedMedia,
-		messageContext);
+		messageContext,
+		paused);
 	const auto same = (_attachedMedia->kind == updated.kind)
 		&& (_attachedMedia->id == updated.id)
 		&& (_attachedMedia->rounded == updated.rounded);
@@ -2174,8 +2245,8 @@ void Poll::Header::updateAttachedMedia() {
 			_owner->_parent->data()->fullId());
 		if (const auto size = photo->size(Data::PhotoSize::Large)) {
 			_attachedMedia->photoSize = *size;
-		} else if (const auto size = photo->size(Data::PhotoSize::Thumbnail)) {
-			_attachedMedia->photoSize = *size;
+		} else if (const auto s = photo->size(Data::PhotoSize::Thumbnail)) {
+			_attachedMedia->photoSize = *s;
 		}
 	}
 	if ((updated.kind == PollThumbnailKind::Document
@@ -2192,8 +2263,10 @@ void Poll::Header::updateAttachedMedia() {
 	if (_attachedMedia->thumbnail) {
 		_attachedMedia->thumbnail->subscribeToUpdates(
 			crl::guard(_owner, [=] {
-				_attachedMediaCache = QImage();
-				_owner->repaint();
+				if (!_owner->_parent->delegate()->elementAnimationsPaused()) {
+					_attachedMediaCache = QImage();
+					_owner->repaint();
+				}
 			}));
 	}
 }
@@ -2375,28 +2448,35 @@ uint16 Poll::Header::solutionSelectionLength() const {
 		: uint16(0);
 }
 
-TextSelection Poll::Header::toSolutionSelection(TextSelection selection) const {
+TextSelection Poll::Header::toSolutionSelection(
+		TextSelection selection) const {
 	return UnshiftItemSelection(selection, _description);
 }
 
-TextSelection Poll::Header::fromSolutionSelection(TextSelection selection) const {
+TextSelection Poll::Header::fromSolutionSelection(
+		TextSelection selection) const {
 	return ShiftItemSelection(selection, _description);
 }
 
-TextSelection Poll::Header::toQuestionSelection(TextSelection selection) const {
+TextSelection Poll::Header::toQuestionSelection(
+		TextSelection selection) const {
 	return UnshiftItemSelection(
 		selection,
 		uint16(_description.length() + solutionSelectionLength()));
 }
 
-TextSelection Poll::Header::fromQuestionSelection(TextSelection selection) const {
+TextSelection Poll::Header::fromQuestionSelection(
+		TextSelection selection) const {
 	return ShiftItemSelection(
 		selection,
 		uint16(_description.length() + solutionSelectionLength()));
 }
 
 void Poll::Options::checkQuizAnswered() {
-	if (!_owner->_voted || !_votedFromHere || !_owner->_poll->quiz() || anim::Disabled()) {
+	if (!_owner->_voted
+		|| !_votedFromHere
+		|| !_owner->_poll->quiz()
+		|| anim::Disabled()) {
 		return;
 	}
 	const auto i = ranges::find(_answers, true, &Answer::chosen);
@@ -2486,10 +2566,21 @@ void Poll::Header::updateRecentVoters() {
 void Poll::Options::updateAnswers() {
 	const auto context = Core::TextContext({
 		.session = &_owner->_poll->session(),
-		.repaint = [=] { _owner->repaint(); },
+		.repaint = [=] {
+			if (!_owner->_parent->delegate()->elementAnimationsPaused()) {
+				_owner->repaint();
+			}
+		},
 		.customEmojiLoopLimit = 2,
 	});
-	const auto repaintThumbnail = crl::guard(_owner, [=] { _owner->repaint(); });
+	const auto repaintThumbnail = crl::guard(_owner, [=] {
+		if (!_owner->_parent->delegate()->elementAnimationsPaused()) {
+			_owner->repaint();
+		}
+	});
+	const auto paused = [=] {
+		return _owner->_parent->delegate()->elementAnimationsPaused();
+	};
 	const auto item = _owner->_parent->data();
 	const auto messageContext = Window::SessionController::MessageContext{
 		.id = item->fullId(),
@@ -2523,7 +2614,12 @@ void Poll::Options::updateAnswers() {
 				&PollAnswer::option);
 			Assert(i != end(_owner->_poll->answers));
 			answer.fillData(_owner->_poll, *i, context);
-			answer.fillMedia(_owner->_poll, *i, messageContext, repaintThumbnail);
+			answer.fillMedia(
+				_owner->_poll,
+				*i,
+				messageContext,
+				repaintThumbnail,
+				paused);
 		}
 		_anyAnswerHasMedia = ranges::any_of(_answers, [](const Answer &a) {
 			return a.thumbnail != nullptr;
@@ -2540,7 +2636,12 @@ void Poll::Options::updateAnswers() {
 			&PollAnswer::option);
 		Assert(i != end(_owner->_poll->answers));
 		result.fillData(_owner->_poll, *i, context);
-		result.fillMedia(_owner->_poll, *i, messageContext, repaintThumbnail);
+		result.fillMedia(
+			_owner->_poll,
+			*i,
+			messageContext,
+			repaintThumbnail,
+			paused);
 		return result;
 	}) | ranges::to_vector;
 
@@ -2738,7 +2839,7 @@ void Poll::Options::updateAnswerVotesFromOriginal(
 	answer.votes = original.votes;
 	answer.filling = answer.votes / float64(maxVotes);
 	if (_owner->showVotes() && answer.votes) {
-		answer.votesCountString = QString::number(answer.votes);
+		answer.votesCountString = Lang::FormatCountDecimal(answer.votes);
 		answer.votesCountWidth = st::normalFont->width(
 			answer.votesCountString);
 	} else {
@@ -2949,7 +3050,9 @@ void Poll::Header::paintSolutionBlock(
 	}
 	if (!_closeSolutionLink) {
 		_closeSolutionLink = std::make_shared<LambdaClickHandler>(
-			crl::guard(_owner, [=] { _owner->_headerPart->solutionToggled(false); }));
+			crl::guard(
+				_owner,
+				[=] { _owner->_headerPart->solutionToggled(false); }));
 	}
 
 	const auto &qst = st::historyPagePreview;
@@ -3058,7 +3161,17 @@ int Poll::Options::paintAnswer(
 	if (!context.highlight.pollOption.isEmpty()
 		&& context.highlight.pollOption == answer.option
 		&& context.highlight.collapsion > 0.) {
-		const auto fillingExtra = (_owner->showVotes() && !answer.thumbnail)
+		const auto hlTextWidth = countAnswerContentWidth(answer, width);
+		const auto hlTextHeight = answer.text.countHeight(hlTextWidth);
+		const auto hlMultiline = (hlTextHeight
+			> st::historyPollPercentFont->height);
+		const auto hlVotesExtra = countVotesExtraHeight(
+			answer,
+			hlTextWidth);
+		const auto fillingExtra = (_owner->showVotes()
+			&& !answer.thumbnail
+			&& !hlMultiline
+			&& !hlVotesExtra)
 			? (st::historyPollChoiceRight.height() / 2)
 			: 0;
 		const auto absoluteTop = top
@@ -3094,6 +3207,15 @@ int Poll::Options::paintAnswer(
 		- st::historyPollAnswerPadding.right();
 	const auto media = answer.thumbnail ? PollAnswerMediaSize() : 0;
 	const auto textWidth = countAnswerContentWidth(answer, width);
+	const auto textContentHeight = answer.text.countHeight(textWidth);
+	const auto multilineAnswer = (textContentHeight
+		> st::historyPollPercentFont->height);
+	const auto votesExtraHeight = countVotesExtraHeight(
+		answer,
+		textWidth);
+	const auto fillingContentHeight = (multilineAnswer || votesExtraHeight)
+		? (textContentHeight + votesExtraHeight)
+		: textContentHeight;
 	const auto anyMediaWidth = _anyAnswerHasMedia
 		? (PollAnswerMediaSize() + PollAnswerMediaSkip())
 		: 0;
@@ -3145,7 +3267,11 @@ int Poll::Options::paintAnswer(
 		const auto countX = rightEdge
 			- answer.votesCountWidth
 			- userpicsExtra;
-		const auto atop = top + answerPadding.top();
+		const auto atop = top + answerPadding.top()
+			+ ((multilineAnswer || votesExtraHeight)
+				? (textContentHeight
+					- (votesExtraHeight ? 0 : st::normalFont->height))
+				: 0);
 		p.setOpacity(opacity);
 		p.setFont(st::normalFont);
 		p.setPen(stm->msgDateFg);
@@ -3197,6 +3323,7 @@ int Poll::Options::paintAnswer(
 				answerPadding.top(),
 				width,
 				barContentWidth,
+				fillingContentHeight,
 				context);
 			p.setOpacity(1.);
 		}
@@ -3223,6 +3350,7 @@ int Poll::Options::paintAnswer(
 			answerPadding.top(),
 			width,
 			barContentWidth,
+			fillingContentHeight,
 			context);
 	}
 
@@ -3297,7 +3425,7 @@ void Poll::Options::paintRadio(
 	const auto over = ClickHandler::showAsActive(answer.handler);
 	const auto &regular = stm->msgDateFg;
 
-	const auto chosen = answer.chosen && !_owner->showVotes();
+	const auto chosen = answer.chosen;
 	const auto checkmark = chosen
 		? 1.
 		: answer.selectedAnimation.value(answer.selected ? 1. : 0.);
@@ -3305,11 +3433,15 @@ void Poll::Options::paintRadio(
 	const auto o = p.opacity();
 	if (checkmark < 1.) {
 		p.setBrush(Qt::NoBrush);
-		p.setOpacity(o * (over ? st::historyPollRadioOpacityOver : st::historyPollRadioOpacity));
+		p.setOpacity(o
+			* (over
+				? st::historyPollRadioOpacityOver
+				: st::historyPollRadioOpacity));
 	}
 
 	const auto multiChoice = (_owner->_flags & PollData::Flag::MultiChoice);
-	const auto rect = QRectF(left, top, radio.diameter, radio.diameter).marginsRemoved(QMarginsF(radio.thickness / 2., radio.thickness / 2., radio.thickness / 2., radio.thickness / 2.));
+	const auto rect = QRectF(left, top, radio.diameter, radio.diameter)
+		- Margins(radio.thickness / 2.);
 	const auto radius = st::historyPollCheckboxRadius;
 	if (_sendingAnimation && _sendingAnimation->option == answer.option) {
 		const auto &active = stm->msgServiceFg;
@@ -3356,7 +3488,11 @@ void Poll::Options::paintRadio(
 				p.drawEllipse(inner);
 			}
 			const auto &icon = stm->historyPollChosen;
-			icon.paint(p, left + (radio.diameter - icon.width()) / 2, top + (radio.diameter - icon.height()) / 2, _owner->width());
+			icon.paint(
+				p,
+				left + (radio.diameter - icon.width()) / 2,
+				top + (radio.diameter - icon.height()) / 2,
+				_owner->width());
 		}
 	}
 
@@ -3380,7 +3516,12 @@ void Poll::Options::paintPercent(
 	p.setFont(st::historyPollPercentFont);
 	p.setPen(stm->historyTextFg);
 	const auto pleft = aleft - percentWidth - st::historyPollPercentSkip;
-	p.drawTextLeft(pleft, top + st::historyPollPercentTop, outerWidth, percent, percentWidth);
+	p.drawTextLeft(
+		pleft,
+		top + st::historyPollPercentTop,
+		outerWidth,
+		percent,
+		percentWidth);
 }
 
 void Poll::Options::paintFilling(
@@ -3393,6 +3534,7 @@ void Poll::Options::paintFilling(
 		int topPadding,
 		int width,
 		int contentWidth,
+		int contentHeight,
 		const PaintContext &context) const {
 	const auto st = context.st;
 	const auto stm = context.messageStyle();
@@ -3402,10 +3544,11 @@ void Poll::Options::paintFilling(
 
 	const auto thickness = st::historyPollFillingHeight;
 	const auto max = contentWidth - st::historyPollFillingRight;
-	const auto size = anim::interpolate(st::historyPollFillingMin, max, filling);
+	const auto size
+		= anim::interpolate(st::historyPollFillingMin, max, filling);
 	const auto radius = st::historyPollFillingRadius;
 	const auto ftop = top
-		+ st::historyPollPercentFont->height
+		+ std::max(st::historyPollPercentFont->height, contentHeight)
 		+ st::historyPollFillingTop;
 
 	enum class Style {
@@ -3416,7 +3559,10 @@ void Poll::Options::paintFilling(
 	const auto style = [&] {
 		if (chosen && !correct) {
 			return Style::Incorrect;
-		} else if (chosen && correct && _owner->_poll->quiz() && !context.outbg) {
+		} else if (chosen
+			&& correct
+			&& _owner->_poll->quiz()
+			&& !context.outbg) {
 			return Style::Correct;
 		} else {
 			return Style::Default;
@@ -3531,7 +3677,8 @@ bool Poll::Options::checkAnimationStart() const {
 		// Skip initial changes.
 		return false;
 	}
-	const auto result = (_owner->showVotes() != (_owner->_poll->voted() || _owner->_poll->closed()))
+	const auto result = _owner->showVotes()
+		!= (_owner->_poll->voted() || _owner->_poll->closed())
 		|| answerVotesChanged();
 	if (result) {
 		saveStateInAnimation();
