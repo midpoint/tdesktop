@@ -2,7 +2,7 @@ name: Windows_Manual
 
 on:
   push:
-    branches: [ main ]
+    branches: [ dev ]
   workflow_dispatch:    # Manual update
     paths-ignore:
       - 'docs/**'
