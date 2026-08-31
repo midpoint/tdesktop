@@ -3,7 +3,6 @@ name: Windows_Manual
 on:
   push:
     branches: [ dev ]
-  workflow_dispatch:    # Manual update
     paths-ignore:
       - 'docs/**'
       - '**.md'
@@ -22,6 +21,7 @@ on:
       - 'Telegram/Telegram/**'
       - 'Telegram/configure.sh'
       - 'Telegram/Telegram.plist'
+  workflow_dispatch:    # Manual update   
   
 jobs:
 
