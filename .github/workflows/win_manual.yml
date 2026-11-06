@@ -62,6 +62,22 @@ jobs:
           submodules: recursive
           path: ${{ env.TBUILD }}\${{ env.REPO_NAME }}
 
+      - name: Patch for Windows 10+ x64 only.
+        shell: bash
+        run: |
+          cd $TBUILD/$REPO_NAME
+          # Switch Rust target from Win7-compatible to standard Win10+ x64 MSVC target.
+          # Must run BEFORE "First set up" so CACHE_KEY reflects the patched prepare.py.
+          grep -rl "x86_64-win7-windows-msvc" Telegram/build Telegram/SourceFiles Telegram/cmake 2>/dev/null | while read f; do
+            echo "Patching $f"
+            sed -i 's/x86_64-win7-windows-msvc/x86_64-pc-windows-msvc/g' "$f"
+          done
+          # -Z build-std (compiling std from source) is only needed for the custom
+          # Win7 target; clear it to save disk space and build time.
+          sed -i 's/^set "RUST_BUILD_STD=.*"/set "RUST_BUILD_STD="/I' Telegram/build/prepare/win.bat
+          # Show what the prepare script now uses, for verification.
+          grep -n "RUST_TARGET\|RUST_BUILD_STD" Telegram/build/prepare/win.bat || true
+
       - name: First set up.
         shell: bash
         run: |
@@ -92,12 +108,55 @@ jobs:
           Remove-Item vs_buildtools.exe -Force
           if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { exit $p.ExitCode }
 
+      - name: Free up disk space before Libraries.
+        shell: pwsh
+        run: |
+          Write-Host "Free space before cleanup:"
+          Get-PSDrive C | Select-Object @{n='Used(GB)';e={[math]::Round($_.Used/1GB,1)}},@{n='Free(GB)';e={[math]::Round($_.Free/1GB,1)}}
+
+          # Remove Docker images and caches (about 7 GB)
+          docker rmi $(docker images -q) 2>$null
+          docker system prune -af 2>$null
+
+          # Remove heavy preinstalled components not needed for this build
+          $targets = @(
+            'C:\Android',
+            'C:\ProgramData\Android',
+            'C:\ProgramData\Chocolatey\lib\android-sdk',
+            'C:\Users\runneradmin\.android',
+            'C:\ProgramData\DockerDesktop',
+            'C:\Program Files\Docker',
+            'C:\Program Files\dotnet',
+            'C:\Program Files\MySQL',
+            'C:\Program Files\MongoDB',
+            'C:\Program Files\PostgreSQL',
+            'C:\Program Files\Microsoft SQL Server',
+            'C:\Program Files\R\R-4.6.1',
+            'C:\hostedtoolcache\windows\stack',
+            'C:\hostedtoolcache\windows\PyPy',
+            'C:\ghcup',
+            'C:\cabal',
+            'C:\SeleniumWebDrivers',
+            'C:\tools\kotlinc',
+            'C:\tools\php',
+            'C:\tools\Anaconda'
+          )
+          foreach ($t in $targets) {
+            if (Test-Path $t) {
+              Write-Host "Removing $t"
+              Remove-Item -Recurse -Force $t -ErrorAction SilentlyContinue
+            }
+          }
+
+          Write-Host "Free space after cleanup:"
+          Get-PSDrive C | Select-Object @{n='Used(GB)';e={[math]::Round($_.Used/1GB,1)}},@{n='Free(GB)';e={[math]::Round($_.Free/1GB,1)}}
+
       - uses: Eden-CI/msvc-dev-cmd@master
         name: Native Tools Command Prompt.
         with:
           arch: ${{ matrix.arch }}
           sdk: ${{ env.SDK }}
-          toolset: ${{ case(matrix.arch == 'arm64', '', '14.44') }}
+          toolset: ${{ matrix.arch == 'arm64' && '' || '14.44' }}
 
       - name: NuGet sources.
         run: |
