@@ -194,6 +194,20 @@ jobs:
           key: ${{ runner.OS }}-${{ matrix.arch }}-${{ matrix.qt || 'qt' }}-${{ env.CACHE_KEY }}
           restore-keys: ${{ runner.OS }}-${{ matrix.arch }}-${{ matrix.qt || 'qt' }}-
 
+      - name: Repair stripped Libraries cache.
+        shell: bash
+        run: |
+          WALLET_CPP="$LibrariesPath/tdesktop_rust/out/src/wallet_engine/wallet_engine.cpp"
+          if [ -f "$WALLET_CPP" ]; then
+            echo "Rust artifacts are present, nothing to repair."
+            exit 0
+          fi
+          echo "::warning::Generated Rust artifacts are missing in the restored cache (an older cleanup step stripped them). Forcing a rebuild of the Rust part only."
+          rm -rf "$LibrariesPath/tdesktop_rust" "$LibrariesPath/tlottie" "$LibrariesPath/wallet-engine"
+          rm -f "$LibrariesPath"/cache_keys/*tdesktop_rust* \
+                "$LibrariesPath"/cache_keys/*tlottie* \
+                "$LibrariesPath"/cache_keys/*wallet-engine*
+
       - name: Libraries.
         run: |
           %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent ${{ matrix.qt }}
@@ -248,7 +262,23 @@ jobs:
 
       - name: Free up some disk space.
         shell: bash
-        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' ')' -type f ')' -o -empty ')' -delete
+        run: |
+          # Keep every artifact the later CMake configure/build needs.
+          # NOTE: */tdesktop_rust/out/* is protected because the Rust step generates
+          # out/lib + out/include + out/src/wallet_engine/wallet_engine.cpp there,
+          # and wallet_engine.cpp is compiled as a normal source file later on.
+          find $LibrariesPath '(' '(' ! '(' \
+            -name '*.lib' -o -name '*.a' -o -name '*.exe' \
+            -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' \
+            -o -name '*.cpp' -o -name '*.c' -o -name '*.cc' -o -name '*.ipp' \
+            -o -path '*/include/*' -o -path '*/objects-*' \
+            -o -path '*/cache_keys/*' -o -path '*/patches/*' \
+            -o -path '*/tdesktop_rust/out/*' \
+          ')' -type f ')' -o -empty ')' -delete
+
+          echo "Sanity check for generated Rust sources:"
+          ls -l "$LibrariesPath/tdesktop_rust/out/src/wallet_engine/wallet_engine.cpp" \
+            || { echo "::error::wallet_engine.cpp was removed by the cleanup step"; exit 1; }
 
       - name: Telegram Desktop build.
         if: env.ONLY_CACHE == 'false'
