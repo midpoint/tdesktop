@@ -47,8 +47,9 @@ jobs:
     steps:
       - name: Prepare directories.
         run: |
-          mkdir %userprofile%\TBuild\Libraries
-          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          rem Put TBuild directly on the workspace drive (D:), which has more free
+          rem space than C: where %userprofile% lives. No junction needed anymore.
+          mkdir %GITHUB_WORKSPACE%\TBuild\Libraries
           echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
           echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries${{ matrix.arch == 'x64' && '\win64' || '' }}>>%GITHUB_ENV%
 
@@ -119,6 +120,8 @@ jobs:
           docker system prune -af 2>$null
 
           # Remove heavy preinstalled components not needed for this build
+          # (kept: VS, Windows Kits, CMake, Git, Chocolatey/nuget, Strawberry Perl,
+          #  Python - all are used by the tdesktop prepare/build scripts)
           $targets = @(
             'C:\Android',
             'C:\ProgramData\Android',
@@ -139,7 +142,26 @@ jobs:
             'C:\SeleniumWebDrivers',
             'C:\tools\kotlinc',
             'C:\tools\php',
-            'C:\tools\Anaconda'
+            'C:\tools\Anaconda',
+            'C:\Program Files\LLVM',
+            'C:\Program Files (x86)\LLVM',
+            'C:\hostedtoolcache\windows\Java_Temurin-Hotspot_jdk',
+            'C:\hostedtoolcache\windows\go',
+            'C:\hostedtoolcache\windows\Ruby',
+            'C:\Program Files\Azure CLI2',
+            'C:\Program Files\Amazon\AWSCLIV2',
+            'C:\Program Files\Amazon\AWSLambdaPSModule',
+            'C:\Program Files\Amazon\SessionManagerPlugin',
+            'C:\Program Files\Microsoft Service Fabric',
+            'C:\Program Files\Microsoft SDKs\Service FabricLocalClusterManager',
+            'C:\Program Files\Microsoft SDKs\Service Fabric',
+            'C:\Program Files\Microsoft SDKs\Azure',
+            'C:\Program Files (x86)\Microsoft SDKs\Azure',
+            'C:\Program Files\ImageMagick-7.1.2-Q16-HDRI',
+            'C:\ProgramData\kind',
+            'C:\ProgramData\chocolatey\lib\pulumi.tools.Pulumi',
+            'C:\Program Files (x86)\sbt\bin',
+            'C:\ProgramData\chocolatey\lib\maven.apache-maven.3.9.16'
           )
           foreach ($t in $targets) {
             if (Test-Path $t) {
@@ -167,6 +189,7 @@ jobs:
         id: cache-third-party
         uses: actions/cache@v5
         with:
+          save-always: true
           path: ${{ env.TBUILD }}\ThirdParty
           key: ${{ runner.OS }}-${{ runner.arch }}-third-party-${{ env.CACHE_KEY }}
           restore-keys: ${{ runner.OS }}-${{ runner.arch }}-third-party-
@@ -175,6 +198,7 @@ jobs:
         id: cache-libs
         uses: actions/cache@v5
         with:
+          save-always: true
           path: |
             ${{ env.LibrariesPath }}\*
             !${{ env.LibrariesPath }}\cache_keys
@@ -188,6 +212,7 @@ jobs:
         id: cache-qt
         uses: actions/cache@v5
         with:
+          save-always: true
           path: |
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
@@ -290,19 +315,20 @@ jobs:
           %TDESKTOP_BUILD_ARCH% ^
           ${{ matrix.qt }} ^
           %TDESKTOP_BUILD_API% ^
-          -D CMAKE_CONFIGURATION_TYPES=Debug ^
+          -D CMAKE_CONFIGURATION_TYPES=Release ^
           -D CMAKE_COMPILE_WARNING_AS_ERROR=ON ^
           -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT= ^
           -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF ^
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF ^
           %TDESKTOP_BUILD_DEFINE%
 
-          cmake --build ..\out --config Debug --parallel
+          rem Release build: much smaller on disk than Debug and no debug-CRT dependency.
+          cmake --build ..\out --config Release --parallel
 
       - name: Move artifact.
         if: (env.UPLOAD_ARTIFACT == 'true') || (github.ref == 'refs/heads/nightly')
         run: |
-          set OUT=%TBUILD%\%REPO_NAME%\out\Debug
+          set OUT=%TBUILD%\%REPO_NAME%\out\Release
           mkdir artifact
           move %OUT%\Telegram.exe artifact/
           move %OUT%\Updater.exe artifact/
