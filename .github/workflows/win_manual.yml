@@ -76,13 +76,8 @@ jobs:
           # -Z build-std (compiling std from source) is only needed for the custom
           # Win7 target; clear it to save disk space and build time.
           sed -i 's/^set "RUST_BUILD_STD=.*"/set "RUST_BUILD_STD="/I' Telegram/build/prepare/win.bat
-          # Build Qt in Release mode only. Without skip-release, prepare.py would
-          # configure Qt with -debug-and-release which doubles the build time and
-          # the cache size (the debug Qt output is never used by a Release app).
-          sed -i 's/SET CONFIGURATIONS=-debug-and-release/SET CONFIGURATIONS=-release/; s/CONFIGURATIONS=-debug-and-release/CONFIGURATIONS=-release/' Telegram/build/prepare/prepare.py
           # Show what the prepare script now uses, for verification.
           grep -n "RUST_TARGET\|RUST_BUILD_STD" Telegram/build/prepare/win.bat || true
-          grep -n "CONFIGURATIONS=" Telegram/build/prepare/prepare.py | head -6 || true
 
       - name: First set up.
         shell: bash
@@ -244,9 +239,12 @@ jobs:
 
       - name: Libraries.
         run: |
-          rem Build all libraries in BOTH configs (official default flow, no
-          rem skip-release): the Release app must link Release-built libraries.
-          %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat silent ${{ matrix.qt }}
+          rem Build libraries in Debug config only (skip-release), matching the
+          rem Debug app build below. This is the upstream CI configuration.
+          rem NOTE: do NOT remove skip-release - without it breakpad also builds
+          rem its dump_syms tool which needs ATL headers (atlbase.h) that are NOT
+          rem installed on the GitHub-hosted runner image.
+          %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent ${{ matrix.qt }}
 
       - name: Read configuration matrix.
         shell: bash
@@ -326,20 +324,20 @@ jobs:
           %TDESKTOP_BUILD_ARCH% ^
           ${{ matrix.qt }} ^
           %TDESKTOP_BUILD_API% ^
-          -D CMAKE_CONFIGURATION_TYPES=Release ^
+          -D CMAKE_CONFIGURATION_TYPES=Debug ^
           -D CMAKE_COMPILE_WARNING_AS_ERROR=ON ^
           -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT= ^
           -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF ^
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF ^
           %TDESKTOP_BUILD_DEFINE%
 
-          rem Release build: much smaller on disk than Debug and no debug-CRT dependency.
-          cmake --build ..\out --config Release --parallel
+          rem Debug build matches the Debug-only libraries (skip-release above).
+          cmake --build ..\out --config Debug --parallel
 
       - name: Move artifact.
         if: (env.UPLOAD_ARTIFACT == 'true') || (github.ref == 'refs/heads/nightly')
         run: |
-          set OUT=%TBUILD%\%REPO_NAME%\out\Release
+          set OUT=%TBUILD%\%REPO_NAME%\out\Debug
           mkdir artifact
           move %OUT%\Telegram.exe artifact/
           move %OUT%\Updater.exe artifact/
