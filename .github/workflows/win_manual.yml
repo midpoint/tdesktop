@@ -76,8 +76,13 @@ jobs:
           # -Z build-std (compiling std from source) is only needed for the custom
           # Win7 target; clear it to save disk space and build time.
           sed -i 's/^set "RUST_BUILD_STD=.*"/set "RUST_BUILD_STD="/I' Telegram/build/prepare/win.bat
+          # Build Qt in Release mode only. Without skip-release, prepare.py would
+          # configure Qt with -debug-and-release which doubles the build time and
+          # the cache size (the debug Qt output is never used by a Release app).
+          sed -i 's/SET CONFIGURATIONS=-debug-and-release/SET CONFIGURATIONS=-release/; s/CONFIGURATIONS=-debug-and-release/CONFIGURATIONS=-release/' Telegram/build/prepare/prepare.py
           # Show what the prepare script now uses, for verification.
           grep -n "RUST_TARGET\|RUST_BUILD_STD" Telegram/build/prepare/win.bat || true
+          grep -n "CONFIGURATIONS=" Telegram/build/prepare/prepare.py | head -6 || true
 
       - name: First set up.
         shell: bash
@@ -239,7 +244,9 @@ jobs:
 
       - name: Libraries.
         run: |
-          %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent ${{ matrix.qt }}
+          rem Build all libraries in BOTH configs (official default flow, no
+          rem skip-release): the Release app must link Release-built libraries.
+          %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat silent ${{ matrix.qt }}
 
       - name: Read configuration matrix.
         shell: bash
