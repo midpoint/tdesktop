@@ -872,6 +872,15 @@ ChatWidget::ChatWidget(
 		case BottomControlsAction::MuteUnmute:
 			toggleMuteUnmute();
 			break;
+		case BottomControlsAction::Discuss:
+			if (const auto channel = _peer->asChannel()) {
+				if (const auto discussion = channel->discussionLink()) {
+					controller->showPeerHistory(
+						discussion,
+						Window::SectionShow::Way::Forward);
+				}
+			}
+			break;
 		case BottomControlsAction::Report:
 			reportSelectedMessages();
 			break;
@@ -897,6 +906,7 @@ ChatWidget::ChatWidget(
 			| PeerUpdateFlag::IsBlocked
 			| PeerUpdateFlag::Notifications
 			| PeerUpdateFlag::ChannelAmIn
+			| PeerUpdateFlag::DiscussionLink
 			| PeerUpdateFlag::BotStartToken
 			| PeerUpdateFlag::FullInfo
 			| PeerUpdateFlag::Members
@@ -1785,6 +1795,7 @@ void ChatWidget::setupComposeControls() {
 			}
 		}
 		_inner->sendingLandingUserScroll();
+		Tgw::ListScroll::Input(_inner.data());
 		_scroll->keyPressEvent(e);
 	}, lifetime());
 
@@ -1792,6 +1803,7 @@ void ChatWidget::setupComposeControls() {
 	) | rpl::on_next([=](not_null<QKeyEvent*> e) {
 		if (!_inner->lastMessageEditRequestNotify()) {
 			_inner->sendingLandingUserScroll();
+			Tgw::ListScroll::Input(_inner.data());
 			_scroll->keyPressEvent(e);
 		}
 	}, lifetime());
@@ -2006,6 +2018,7 @@ void ChatWidget::setupSwipeReplyAndBack() {
 		.update = std::move(update),
 		.init = std::move(init),
 		.dontStart = _inner->touchMaybeSelectingValue(),
+		.handoff = _inner->touchSwipeHandoff(),
 		.skipWheelEvent = [=](not_null<QWheelEvent*> event) {
 			const auto delta = Ui::ScrollDelta(event);
 			if (std::abs(delta.x()) <= std::abs(delta.y())) {
@@ -2452,9 +2465,12 @@ void ChatWidget::send(Api::SendOptions options) {
 		sendRichDraft(page, options);
 		return;
 	}
+	const auto text = options.unformatted
+		? _composeControls->getTextWithTags()
+		: _composeControls->getTextWithAppliedMarkdown();
 	if (!options.scheduled) {
 		auto message = Api::MessageToSend(prepareSendAction(options));
-		message.textWithTags = _composeControls->getTextWithAppliedMarkdown();
+		message.textWithTags = text;
 		if (!session().ephemeralMessages().wouldSend(message)
 			&& showSlowmodeError()) {
 			return;
@@ -2462,7 +2478,7 @@ void ChatWidget::send(Api::SendOptions options) {
 	}
 
 	sendTextWithTags(
-		_composeControls->getTextWithAppliedMarkdown(),
+		text,
 		true,
 		options,
 		nullptr);
@@ -3881,9 +3897,6 @@ void ChatWidget::finishSending(const Api::SendOptions &options) {
 }
 
 void ChatWidget::setupSendingLanding() {
-	_scroll->setCustomWheelProcess([=](not_null<QWheelEvent*> e) {
-		return _inner->processSendingLandingWheel(e);
-	});
 	for (const auto child : _scroll->children()) {
 		if (const auto bar = dynamic_cast<Ui::ElasticScrollBar*>(child)) {
 			base::install_event_filter(bar, [=](not_null<QEvent*> e) {

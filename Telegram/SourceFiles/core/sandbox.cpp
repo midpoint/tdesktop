@@ -13,12 +13,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mainwidget.h"
 #include "mainwindow.h"
 #include "storage/localstorage.h"
+#include "tgw/tgw_runtime.h"
 #include "window/notifications_manager.h"
 #include "window/window_controller.h"
 #include "core/crash_reports.h"
 #include "core/crash_report_window.h"
 #include "core/application.h"
 #include "core/external_control.h"
+#include "window/themes/window_theme.h"
 #include "core/launcher.h"
 #include "core/local_url_handlers.h"
 #include "core/update_checker.h"
@@ -267,7 +269,7 @@ int Sandbox::stopRunningInstance() {
 void Sandbox::QuitWhenStarted() {
 	if (!QApplication::instance() || !Instance()._started) {
 		QuitOnStartRequested = true;
-	} else {
+	} else if (!Tgw::Runtime::IsExitPrevent(QuitWhenStarted)) {
 		// WHY: quit() on macOS since Qt 6.0 routes through [NSApp terminate:],
 		// and since Qt 6.7 even exit() emits aboutToQuit synchronously, which
 		// destroys windows mid-dispatch. So exit(0), deferred one loop tick.
@@ -361,10 +363,11 @@ Sandbox::~Sandbox() {
 
 bool Sandbox::event(QEvent *e) {
 	if (e->type() == QEvent::Quit) {
-		if (Quitting()) {
+		if (!Quitting()) {
+			Quit(QuitReason::QtQuitEvent);
+		} else if (!Tgw::Runtime::IsExitPrevent(QuitWhenStarted)) {
 			return QCoreApplication::event(e);
 		}
-		Quit(QuitReason::QtQuitEvent);
 		e->ignore();
 		return false;
 	} else if (e->type() == QEvent::Close) {
@@ -398,6 +401,10 @@ void Sandbox::socketConnected() {
 	}
 	if (cQuit()) {
 		commands += u"CMD:quit;"_q;
+	} else if (!cApplyTheme().isEmpty()) {
+		commands += u"CMD:theme:"_q
+			+ QString::fromUtf8(QUrl::toPercentEncoding(cApplyTheme()))
+			+ ';';
 	} else if (cRefStartUrls().isEmpty()) {
 		commands += u"CMD:show;"_q;
 	}
@@ -902,6 +909,14 @@ uint64 Sandbox::execExternal(const QString &cmd) {
 		}
 	} else if (cmd == "quit") {
 		Quit();
+	} else if (cmd.startsWith(u"theme:"_q)) {
+		constexpr auto kOmarchyThemeSyncKey = std::string_view("omarchy.theme.sync");
+		if (Core::App().settings().readPref<bool>(kOmarchyThemeSyncKey, true)) {
+			const auto path = QUrl::fromPercentEncoding(cmd.mid(6).toUtf8());
+			if (Window::Theme::Apply(path)) {
+				Window::Theme::KeepApplied();
+			}
+		}
 	}
 	return 0;
 }

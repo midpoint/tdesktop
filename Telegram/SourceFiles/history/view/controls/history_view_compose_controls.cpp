@@ -2234,8 +2234,23 @@ rpl::producer<MessageToEdit> ComposeControls::editRequests() const {
 }
 
 rpl::producer<std::optional<bool>> ComposeControls::attachRequests() const {
+	const auto hideDuration = _st.attach.ripple.hideDuration;
 	return rpl::merge(
-		_attachToggle->clicks() | rpl::map_to(std::optional<bool>()),
+		_attachToggle->clicks() | rpl::filter([=] {
+			const auto menu = _attachBotsMenu.get();
+			if (!menu) {
+				return true;
+			}
+			const auto show = menu->isHidden();
+			base::call_delayed(hideDuration, menu, [=] {
+				if (show) {
+					menu->showAnimated();
+				} else {
+					menu->hideAnimated();
+				}
+			});
+			return !show;
+		}) | rpl::map_to(std::optional<bool>()),
 		_attachRequests.events()
 	) | rpl::filter([=] {
 		if (isEditingMessage()) {
@@ -2465,6 +2480,10 @@ void ComposeControls::showForGrab() {
 
 TextWithTags ComposeControls::getTextWithAppliedMarkdown() const {
 	return _field->getTextWithAppliedMarkdown();
+}
+
+TextWithTags ComposeControls::getTextWithTags() const {
+	return _field->getTextWithTags();
 }
 
 void ComposeControls::clear(bool keepReply) {

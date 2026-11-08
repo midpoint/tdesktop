@@ -29,6 +29,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_unread_things.h"
 #include "lang/lang_keys.h"
 #include "lottie/lottie_single_player.h"
+#include "settings.h"
 #include "ui/chat/chat_style.h"
 #include "ui/chat/chat_theme.h"
 #include "ui/effects/path_shift_gradient.h"
@@ -750,6 +751,12 @@ FillMenuResult FillSendMenu(
 			[=] { action({ Api::SendOptions{ .silent = true } }, details); },
 			&icons.menuMute);
 	}
+	if (sending && GetEnhancedBool("send_unformatted")) {
+		menu->addAction(
+			tr::lng_send_unformatted(tr::now),
+			[=] { action({ Api::SendOptions{ .unformatted = true } }, details); },
+			&icons.menuUnformatted);
+	}
 	if (sending && type != Type::SilentOnly) {
 		menu->addAction(
 			((type == Type::Reminder)
@@ -923,29 +930,29 @@ void SetupReadAllMenu(
 		Fn<Data::Thread*()> currentThread,
 		const QString &text,
 		Fn<void(not_null<Data::Thread*>, Fn<void()>)> sendReadRequest) {
-	struct State {
-		base::unique_qptr<Ui::PopupMenu> menu;
-		base::flat_set<base::weak_ptr<Data::Thread>> sentForEntries;
-	};
-	const auto state = std::make_shared<State>();
+	using Entries = base::flat_set<base::weak_ptr<Data::Thread>>;
+	const auto menu = std::make_shared<base::unique_qptr<Ui::PopupMenu>>();
+	const auto sentForEntries = std::make_shared<Entries>();
 	const auto showMenu = [=] {
 		const auto thread = base::make_weak(currentThread());
 		if (!thread) {
 			return;
 		}
-		state->menu = base::make_unique_q<Ui::PopupMenu>(
+		*menu = base::make_unique_q<Ui::PopupMenu>(
 			button,
 			st::popupMenuWithIcons);
-		state->menu->addAction(text, [=] {
+		// The action can't own the menu that owns it: the last reference
+		// would go inside ~QWidget of the menu and delete it once again.
+		(*menu)->addAction(text, [=] {
 			const auto strong = thread.get();
-			if (!strong || !state->sentForEntries.emplace(thread).second) {
+			if (!strong || !sentForEntries->emplace(thread).second) {
 				return;
 			}
 			sendReadRequest(strong, [=] {
-				state->sentForEntries.remove(thread);
+				sentForEntries->remove(thread);
 			});
 		}, &st::menuIconMarkRead);
-		state->menu->popup(QCursor::pos());
+		(*menu)->popup(QCursor::pos());
 	};
 
 	base::install_event_filter(button, [=](not_null<QEvent*> e) {
