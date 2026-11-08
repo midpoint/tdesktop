@@ -72,7 +72,7 @@ jobs:
           grep -rl "x86_64-win7-windows-msvc" Telegram/build Telegram/SourceFiles Telegram/cmake 2>/dev/null | while read f; do
             echo "Patching $f"
             sed -i 's/x86_64-win7-windows-msvc/x86_64-pc-windows-msvc/g' "$f"
-          done
+          done || true
           # -Z build-std (compiling std from source) is only needed for the custom
           # Win7 target; clear it to save disk space and build time.
           sed -i 's/^set "RUST_BUILD_STD=.*"/set "RUST_BUILD_STD="/I' Telegram/build/prepare/win.bat
@@ -115,9 +115,9 @@ jobs:
           Write-Host "Free space before cleanup:"
           Get-PSDrive C | Select-Object @{n='Used(GB)';e={[math]::Round($_.Used/1GB,1)}},@{n='Free(GB)';e={[math]::Round($_.Free/1GB,1)}}
 
-          # Remove Docker images and caches (about 7 GB)
-          docker rmi $(docker images -q) 2>$null
-          docker system prune -af 2>$null
+          # NOTE: no docker cleanup here - the docker daemon is often not running
+          # on the hosted runner, and a failing native command can poison the
+          # step's exit code. It reclaimed 0 B anyway (run 3 logs).
 
           # Remove heavy preinstalled components not needed for this build
           # (kept: VS, Windows Kits, CMake, Git, Chocolatey/nuget, Strawberry Perl,
@@ -172,6 +172,10 @@ jobs:
 
           Write-Host "Free space after cleanup:"
           Get-PSDrive C | Select-Object @{n='Used(GB)';e={[math]::Round($_.Used/1GB,1)}},@{n='Free(GB)';e={[math]::Round($_.Free/1GB,1)}}
+
+          # Explicitly succeed so a stray $LASTEXITCODE from any native command
+          # can never fail this step.
+          exit 0
 
       - uses: Eden-CI/msvc-dev-cmd@master
         name: Native Tools Command Prompt.
