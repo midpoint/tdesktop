@@ -90,6 +90,16 @@ jobs:
 
           echo "$(sha256sum $TBUILD/$REPO_NAME/$PREPARE_PATH | awk '{ print $1 }')" >> CACHE_KEY.txt
           echo "$SDK" >> CACHE_KEY.txt
+          # Salt: bump this line whenever a fix changes what the caches must
+          # contain. The 2026-11-08 caches were saved after the disk-cleanup
+          # step had stripped the Rust crate sources (Cargo.toml / *.rs) out
+          # of the Libraries tree, and actions/cache can never overwrite an
+          # existing key - so without a new key every run would restore the
+          # stripped cache forever. With the salt the exact key misses, the
+          # restore-keys fallback still reuses the old caches (the C++ libs
+          # in them are fine), the repair step below rebuilds the Rust trio
+          # once, and the job-end save writes a clean cache under this key.
+          echo "rust-src-cache-v2" >> CACHE_KEY.txt
           echo "CACHE_KEY=$(sha256sum CACHE_KEY.txt | awk '{ print $1 }')" >> $GITHUB_ENV
 
           echo "Configurate git for cherry-picks."
@@ -226,12 +236,34 @@ jobs:
       - name: Repair stripped Libraries cache.
         shell: bash
         run: |
-          WALLET_CPP="$LibrariesPath/tdesktop_rust/out/src/wallet_engine/wallet_engine.cpp"
-          if [ -f "$WALLET_CPP" ]; then
-            echo "Rust artifacts are present, nothing to repair."
+          # tdesktop_rust is rebuilt whenever wallet-engine or tlottie changes,
+          # and its build reads the *sources* of both crates:
+          #   cargo add --path ..\tlottie            -> tlottie\Cargo.toml
+          #   cargo add --path ..\wallet-engine      -> wallet-engine\Cargo.toml
+          #   cargo run --manifest-path ..\wallet-engine\bindgen\cpp\bindgen\Cargo.toml
+          # The old cleanup step stripped exactly those files (Cargo.toml /
+          # *.rs were not on its keep-list) from the cached Libraries tree,
+          # while tdesktop_rust\out\* was protected - so checking
+          # wallet_engine.cpp alone passes on a cache that cannot rebuild
+          # tdesktop_rust (this is what failed the 2026-11-15 run). Check
+          # every file the Rust rebuild needs.
+          missing=0
+          for f in \
+            "$LibrariesPath/tdesktop_rust/out/src/wallet_engine/wallet_engine.cpp" \
+            "$LibrariesPath/tlottie/Cargo.toml" \
+            "$LibrariesPath/wallet-engine/Cargo.toml" \
+            "$LibrariesPath/wallet-engine/bindgen/cpp/bindgen/Cargo.toml"
+          do
+            if [ ! -f "$f" ]; then
+              echo "Missing in restored cache: $f"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 0 ]; then
+            echo "Rust artifacts and crate sources are present, nothing to repair."
             exit 0
           fi
-          echo "::warning::Generated Rust artifacts are missing in the restored cache (an older cleanup step stripped them). Forcing a rebuild of the Rust part only."
+          echo "::warning::Rust crate sources/artifacts are incomplete in the restored cache (an older cleanup step stripped them). Forcing a rebuild of the Rust part only."
           rm -rf "$LibrariesPath/tdesktop_rust" "$LibrariesPath/tlottie" "$LibrariesPath/wallet-engine"
           rm -f "$LibrariesPath"/cache_keys/*tdesktop_rust* \
                 "$LibrariesPath"/cache_keys/*tlottie* \
@@ -301,10 +333,16 @@ jobs:
           # NOTE: */tdesktop_rust/out/* is protected because the Rust step generates
           # out/lib + out/include + out/src/wallet_engine/wallet_engine.cpp there,
           # and wallet_engine.cpp is compiled as a normal source file later on.
+          # NOTE: the Rust crate sources (*.rs, Cargo.toml, Cargo.lock) must also
+          # survive: this cleaned tree is what actions/cache saves at the end of
+          # the job, and the next run's tdesktop_rust rebuild does
+          # "cargo add --path ..\tlottie" against the restored cache. Stripping
+          # them here is what broke the 2026-11-15 run.
           find $LibrariesPath '(' '(' ! '(' \
             -name '*.lib' -o -name '*.a' -o -name '*.exe' \
             -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' \
             -o -name '*.cpp' -o -name '*.c' -o -name '*.cc' -o -name '*.ipp' \
+            -o -name '*.rs' -o -name 'Cargo.toml' -o -name 'Cargo.lock' \
             -o -path '*/include/*' -o -path '*/objects-*' \
             -o -path '*/cache_keys/*' -o -path '*/patches/*' \
             -o -path '*/tdesktop_rust/out/*' \
@@ -313,6 +351,8 @@ jobs:
           echo "Sanity check for generated Rust sources:"
           ls -l "$LibrariesPath/tdesktop_rust/out/src/wallet_engine/wallet_engine.cpp" \
             || { echo "::error::wallet_engine.cpp was removed by the cleanup step"; exit 1; }
+          ls -l "$LibrariesPath/tlottie/Cargo.toml" \
+            || { echo "::error::tlottie/Cargo.toml was removed by the cleanup step"; exit 1; }
 
       - name: Telegram Desktop build.
         if: env.ONLY_CACHE == 'false'
