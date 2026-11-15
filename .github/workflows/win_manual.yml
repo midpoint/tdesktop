@@ -389,8 +389,16 @@ jobs:
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\Debug
           mkdir artifact
-          move %OUT%\Telegram.exe artifact/
-          move %OUT%\Updater.exe artifact/
+          rem This fork's main executable is 64Gram.exe, not Telegram.exe
+          rem (see the build log: "Telegram.vcxproj -> ...\out\Debug\64Gram.exe").
+          rem The old step moved Telegram.exe, which does not exist; cmd's
+          rem move failure did not fail the step because the following
+          rem Updater.exe move succeeded, so the 2026-11-15 run went green
+          rem with an artifact containing only Updater.exe. Fail loudly now
+          rem if the main executable is not where it should be.
+          move %OUT%\64Gram.exe artifact\
+          if not exist artifact\64Gram.exe (dir %OUT% & exit /b 1)
+          move %OUT%\Updater.exe artifact\
       - uses: actions/upload-artifact@v7
         name: Upload artifact.
         if: (env.UPLOAD_ARTIFACT == 'true') || (github.ref == 'refs/heads/nightly')
