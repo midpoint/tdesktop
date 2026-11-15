@@ -1,4 +1,4 @@
-﻿# This file is part of Telegram Desktop,
+# This file is part of Telegram Desktop,
 # the official desktop application for the Telegram messaging service.
 #
 # For license and copyright information please follow this link:
@@ -30,6 +30,7 @@ include(cmake/lib_stripe.cmake)
 include(cmake/lib_tgcalls.cmake)
 include(cmake/lib_prisma.cmake)
 include(cmake/lib_fido2.cmake)
+include(cmake/lib_update_zstd.cmake)
 include(cmake/lib_zxcvbn.cmake)
 include(cmake/lib_litehtml.cmake)
 include(cmake/lib_quickjs.cmake)
@@ -71,6 +72,7 @@ if (DESKTOP_APP_TEST_APPS OR TDESKTOP_BUILD_UPDATE_TESTS)
         endif()
     endif()
 endif()
+include(cmake/test_iv_editor_state.cmake)
 include(cmake/test_iv_editor_table_grid.cmake)
 include(cmake/test_wallet_card_tint.cmake)
 include(cmake/test_wallet_phrase_shares.cmake)
@@ -79,6 +81,7 @@ set_target_properties(Telegram PROPERTIES AUTOMOC ON)
 
 target_link_libraries(Telegram
 PRIVATE
+    tdesktop::update_zstd
     tdesktop::lib_fido2
     tdesktop::lib_litehtml
     tdesktop::lib_quickjs
@@ -170,6 +173,8 @@ PRIVATE
     api/api_editing.cpp
     api/api_editing.h
     api/api_filter_updates.h
+    api/api_forward_reply.cpp
+    api/api_forward_reply.h
     api/api_global_privacy.cpp
     api/api_global_privacy.h
     api/api_hash.cpp
@@ -337,6 +342,8 @@ PRIVATE
     boxes/choose_filter_box.h
     boxes/connection_box.cpp
     boxes/connection_box.h
+    boxes/contacts_box.cpp
+    boxes/contacts_box.h
     boxes/create_poll_box.cpp
     boxes/create_poll_box.h
     boxes/delete_messages_box.cpp
@@ -643,6 +650,8 @@ PRIVATE
     core/update_unpack.h
     core/update_verify.cpp
     core/update_verify.h
+    core/update_zstd.cpp
+    core/update_zstd.h
     core/utils.cpp
     core/utils.h
     core/version.h
@@ -870,6 +879,8 @@ PRIVATE
     dialogs/ui/dialogs_topics_view.h
     dialogs/ui/dialogs_video_userpic.cpp
     dialogs/ui/dialogs_video_userpic.h
+    dialogs/dialogs_archive_slide.cpp
+    dialogs/dialogs_archive_slide.h
     dialogs/dialogs_community_chats_list.cpp
     dialogs/dialogs_community_chats_list.h
     dialogs/dialogs_community_requestable_list.cpp
@@ -894,6 +905,8 @@ PRIVATE
     dialogs/dialogs_pinned_list.h
     dialogs/dialogs_quick_action.cpp
     dialogs/dialogs_quick_action.h
+    dialogs/dialogs_removed_row_slide.cpp
+    dialogs/dialogs_removed_row_slide.h
     dialogs/dialogs_row.cpp
     dialogs/dialogs_row.h
     dialogs/dialogs_search_from_controllers.cpp
@@ -1335,6 +1348,8 @@ PRIVATE
     info/media/info_media_list_widget.h
     info/media/info_media_provider.cpp
     info/media/info_media_provider.h
+    info/media/info_media_voice_filter.cpp
+    info/media/info_media_voice_filter.h
     info/media/info_media_widget.cpp
     info/media/info_media_widget.h
     info/members/info_members_widget.cpp
@@ -2545,6 +2560,8 @@ PRIVATE
     window/window_chat_preview.h
     window/window_chat_switch_process.cpp
     window/window_chat_switch_process.h
+    window/window_columns.cpp
+    window/window_columns.h
     window/window_connecting_widget.cpp
     window/window_connecting_widget.h
     window/window_controller.cpp
@@ -2838,7 +2855,7 @@ endif()
 if (build_macstore)
     set(bundle_identifier "io.github.tdesktop_x64.TDesktop")
     set(bundle_entitlements "Telegram Lite.entitlements")
-    set(output_name "Telegram Lite")
+    set(output_name "64Gram")
     target_link_options(Telegram
     PRIVATE
         -F${libs_loc}/breakpad/src/client/mac/build/Release
@@ -2859,7 +2876,7 @@ else()
         set(bundle_identifier "com.tdesktop.Telegram")
     endif()
     set(bundle_entitlements "Telegram.entitlements")
-    set(output_name "Telegram")
+    set(output_name "64Gram")
 endif()
 
 if (CMAKE_GENERATOR STREQUAL Xcode)
@@ -2905,7 +2922,7 @@ get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if (APPLE
     OR is_multi_config
     OR NOT CMAKE_EXECUTABLE_SUFFIX STREQUAL ""
-    OR NOT "${output_name}" STREQUAL "Telegram")
+    OR NOT "${output_name}" STREQUAL "64Gram")
     set(output_folder ${CMAKE_BINARY_DIR})
 else()
     set(output_folder ${CMAKE_BINARY_DIR}/bin)
@@ -3049,40 +3066,7 @@ if (NOT DESKTOP_APP_DISABLE_AUTOUPDATE AND NOT build_macstore AND NOT build_wins
     endif()
 
     if (DESKTOP_APP_SPECIAL_TARGET)
-        add_executable(Packer)
-        init_target(Packer)
-
-        add_dependencies(Telegram Packer)
-
-        nice_target_sources(Packer ${src_loc}
-        PRIVATE
-            _other/packer.cpp
-            _other/packer.h
-            core/update_verify.cpp
-            core/update_verify.h
-        )
-
-        target_include_directories(Packer PRIVATE ${src_loc})
-
-        target_link_libraries(Packer
-        PRIVATE
-            desktop-app::external_qt
-            desktop-app::external_zlib
-            desktop-app::external_auto_updates
-            desktop-app::external_openssl
-        )
-
-        if (DESKTOP_APP_USE_PACKAGED)
-            target_compile_definitions(Packer PRIVATE PACKER_USE_PACKAGED)
-        endif()
-
-        if (WIN32 AND DESKTOP_APP_WIN7_BASELINE)
-            # WindowsApp.lib is off the link line, WinRT stubs come from lib_base.
-            target_link_libraries(Packer PRIVATE desktop-app::lib_base)
-            target_link_options(Packer PRIVATE /SUBSYSTEM:CONSOLE,6.01)
-        endif()
-
-        set_target_properties(Packer PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${output_folder})
+        include(cmake/packer_zstd.cmake)
     endif()
 elseif (build_winstore)
     add_executable(StartupTask WIN32)

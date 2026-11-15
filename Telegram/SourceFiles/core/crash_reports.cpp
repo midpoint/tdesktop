@@ -63,7 +63,7 @@ AnnotationRefs ProcessAnnotationRefs;
 #ifndef TDESKTOP_DISABLE_CRASH_REPORTS
 
 QString ReportPath;
-FILE *ReportFile = nullptr;
+auto ReportFile = (FILE*)nullptr;
 int ReportFileNo = 0;
 
 void SafeWriteChar(char ch) {
@@ -405,7 +405,7 @@ StartResult Start() {
 	ReportPath = cWorkingDir() + u"tdata/working"_q;
 
 #ifdef Q_OS_WIN
-	FILE *f = nullptr;
+	auto f = (FILE*)nullptr;
 	if (_wfopen_s(&f, ReportPath.toStdWString().c_str(), L"rb") != 0) {
 		f = nullptr;
 	} else {
@@ -421,7 +421,7 @@ StartResult Start() {
 		fclose(f);
 
 		LOG(("Opened '%1' for reading, the previous "
-			"64Gram Desktop launch was not finished properly :( "
+			"64Gram launch was not finished properly :( "
 			"Crash log size: %2").arg(ReportPath).arg(lastdump.size()));
 
 		return lastdump;

@@ -523,7 +523,7 @@ void Updates::differenceDone(const MTPupdates_Difference &result) {
 		stateDone(d.vstate());
 	} break;
 	case mtpc_updates_differenceTooLong: {
-		LOG(("API Error: updates.differenceTooLong is not supported by 64Gram Desktop!"));
+		LOG(("API Error: updates.differenceTooLong is not supported by 64Gram!"));
 	} break;
 	};
 }
@@ -1747,6 +1747,7 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 			} else {
 				owner.histories().checkTopicCreated(id, newId);
 			}
+			owner.histories().checkReplyTargetSent(id, newId);
 			session().data().unregisterMessageRandomId(randomId);
 		} else {
 			Core::App().calls().handleUpdate(&session(), update);

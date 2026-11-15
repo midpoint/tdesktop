@@ -61,6 +61,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_window.h"
 
 #include <QtGui/QGuiApplication>
+#include <QtGui/QPainterPath>
 #include <QtGui/QScreen>
 #include <QSvgRenderer>
 
@@ -495,7 +496,7 @@ void NotificationsCount::prepareNotificationSampleLarge() {
 		p.setPen(st::dialogsNameFg);
 		p.setFont(st::msgNameFont);
 
-		auto notifyTitle = st::msgNameFont->elided(u"64Gram Desktop"_q, rectForName.width());
+		auto notifyTitle = st::msgNameFont->elided(u"64Gram"_q, rectForName.width());
 		p.drawText(rectForName.left(), rectForName.top() + st::msgNameFont->ascent, notifyTitle);
 
 		st::notifyClose.icon.paint(p, w - st::notifyClosePos.x() - st::notifyClose.width + st::notifyClose.iconPosition.x(), st::notifyClosePos.y() + st::notifyClose.iconPosition.y(), w);
@@ -778,7 +779,13 @@ void NotifyPreview::paint(Painter &p, int x, int y) {
 		QSize{ st::notifyPreviewUserpicSize, st::notifyPreviewUserpicSize });
 
 	if (_nameShown) {
+		auto hq = PainterHighQualityEnabler(p);
+		p.save();
+		auto clip = QPainterPath();
+		clip.addEllipse(QRectF(userpic));
+		p.setClipPath(clip, Qt::IntersectClip);
 		_userpic.render(&p, QRectF(userpic));
+		p.restore();
 	} else {
 		p.drawImage(userpic.topLeft(), _logo);
 	}
