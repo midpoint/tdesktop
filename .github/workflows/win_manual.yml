@@ -359,12 +359,22 @@ jobs:
         run: |
           cd %TBUILD%\%REPO_NAME%\Telegram
 
+          rem CMake 4.4 (what the current windows-latest image ships) added
+          rem policy CMP0194, "MSVC is not an assembler for language ASM".
+          rem The zstd copy pulled in via FetchContent (update_zstd) does not
+          rem set that policy, and tdesktop's configure runs with --error=dev,
+          rem which promotes the "policy is not set" warning into a hard error
+          rem and aborts the whole configure (2026-11-15 evening run).
+          rem Defaulting this one policy to OLD restores the pre-4.4 behaviour
+          rem the build used before, for every subproject that does not set
+          rem CMP0194 itself.
           call configure.bat ^
           %TDESKTOP_BUILD_GENERATOR% ^
           %TDESKTOP_BUILD_ARCH% ^
           ${{ matrix.qt }} ^
           %TDESKTOP_BUILD_API% ^
           -D CMAKE_CONFIGURATION_TYPES=Debug ^
+          -D CMAKE_POLICY_DEFAULT_CMP0194=OLD ^
           -D CMAKE_COMPILE_WARNING_AS_ERROR=ON ^
           -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT= ^
           -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF ^
