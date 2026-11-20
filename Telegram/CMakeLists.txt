@@ -386,6 +386,8 @@ PRIVATE
     boxes/peer_list_widgets.h
     boxes/peer_lists_box.cpp
     boxes/peer_lists_box.h
+    boxes/peer_note_box.cpp
+    boxes/peer_note_box.h
     boxes/passcode_box.cpp
     boxes/passcode_box.h
     boxes/phone_banned_box.cpp

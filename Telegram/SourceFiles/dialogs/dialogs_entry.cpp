@@ -19,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_saved_sublist.h"
 #include "core/application.h"
 #include "core/core_settings.h"
+#include "core/enhanced_settings.h"
 #include "mainwidget.h"
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
@@ -330,12 +331,20 @@ void Entry::notifyUnreadStateChange(const UnreadState &wasState) {
 
 const Ui::Text::String &Entry::chatListNameText() const {
 	const auto version = chatListNameVersion();
-	if (_chatListNameVersion < version || GetEnhancedBool("screenshot_mode") != _previousMode) {
+	const auto notesRevision = EnhancedSettings::PeerNotesRevision();
+	if (_chatListNameVersion < version
+		|| GetEnhancedBool("screenshot_mode") != _previousMode
+		|| _peerNotesRevision != notesRevision) {
 		_previousMode = GetEnhancedBool("screenshot_mode");
 		_chatListNameVersion = version;
+		_peerNotesRevision = notesRevision;
+		auto name = chatListName();
+		if (const auto history = asHistory()) {
+			name = EnhancedSettings::PeerNotePrefix(history->peer) + name;
+		}
 		_chatListNameText.setText(
 			st::semiboldTextStyle,
-			chatListName(),
+			name,
 			Ui::NameTextOptions());
 	}
 	return _chatListNameText;

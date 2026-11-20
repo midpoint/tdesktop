@@ -6,7 +6,11 @@ https://github.com/TDesktop-x64/tdesktop/blob/dev/LEGAL
 */
 #pragma once
 
+#include "base/basic_types.h"
+
 #include <QtCore/QTimer>
+
+class PeerData;
 
 namespace EnhancedSettings {
 
@@ -48,5 +52,14 @@ namespace EnhancedSettings {
 	void Write();
 
 	void Finish();
+
+	// Local per-peer notes, stored in tdata/peer_notes.json.
+	QString PeerNote(uint64 peerId);
+
+	void SetPeerNote(uint64 peerId, const QString &note);
+
+	int PeerNotesRevision();
+
+	QString PeerNotePrefix(not_null<PeerData*> peer);
 
 } // namespace EnhancedSettings

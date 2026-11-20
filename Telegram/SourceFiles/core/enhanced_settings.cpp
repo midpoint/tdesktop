@@ -11,10 +11,12 @@ https://github.com/TDesktop-x64/tdesktop/blob/dev/LEGAL
 #include "window/window_controller.h"
 #include "core/application.h"
 #include "base/parse_helper.h"
+#include "data/data_peer.h"
 #include "facades.h"
 #include "ui/widgets/fields/input_field.h"
 #include "lang/lang_cloud_manager.h"
 
+#include <QtCore/QHash>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonArray>
@@ -125,6 +127,59 @@ namespace EnhancedSettings {
 			return (readValueResult && readResult);
 		}
 
+		QString PeerNotesFilePath() {
+			return cWorkingDir() + qsl("tdata/peer_notes.json");
+		}
+
+		QHash<uint64, QString> &PeerNotesMap() {
+			static auto map = QHash<uint64, QString>();
+			return map;
+		}
+
+		int &PeerNotesRevisionRef() {
+			static auto revision = 0;
+			return revision;
+		}
+
+		void writePeerNotes() {
+			auto object = QJsonObject();
+			for (auto i = PeerNotesMap().cbegin(); i != PeerNotesMap().cend(); ++i) {
+				object.insert(QString::number(i.key()), i.value());
+			}
+			auto file = QFile(PeerNotesFilePath());
+			if (!file.open(QIODevice::WriteOnly)) {
+				return;
+			}
+			file.write(QJsonDocument(object).toJson(QJsonDocument::Compact));
+			file.close();
+		}
+
+		void readPeerNotes() {
+			auto &notes = PeerNotesMap();
+			notes.clear();
+			auto file = QFile(PeerNotesFilePath());
+			if (!file.open(QIODevice::ReadOnly)) {
+				return;
+			}
+			auto doc = QJsonDocument::fromJson(file.readAll());
+			file.close();
+			if (!doc.isObject()) {
+				return;
+			}
+			const auto object = doc.object();
+			for (auto i = object.cbegin(); i != object.cend(); ++i) {
+				auto ok = false;
+				const auto id = i.key().toULongLong(&ok);
+				if (!ok || !id) {
+					continue;
+				}
+				const auto note = i.value().toString();
+				if (!note.isEmpty()) {
+					notes.insert(id, note);
+				}
+			}
+		}
+
 		std::unique_ptr<Manager> Data;
 
 	} // namespace
@@ -141,6 +196,7 @@ namespace EnhancedSettings {
 		if (!readCustomFile()) {
 			WriteDefaultCustomFile();
 		}
+		readPeerNotes();
 	}
 
 	void Manager::write(bool force) {
@@ -273,6 +329,41 @@ namespace EnhancedSettings {
 			};
 			cSetBlockList(toList());
 		}
+	}
+
+	QString PeerNote(uint64 peerId) {
+		return PeerNotesMap().value(peerId);
+	}
+
+	void SetPeerNote(uint64 peerId, const QString &note) {
+		auto &notes = PeerNotesMap();
+		const auto value = note.trimmed();
+		const auto exists = notes.contains(peerId);
+		if (value.isEmpty()) {
+			if (!exists) {
+				return;
+			}
+			notes.remove(peerId);
+		} else {
+			if (exists && notes.value(peerId) == value) {
+				return;
+			}
+			notes.insert(peerId, value);
+		}
+		++PeerNotesRevisionRef();
+		writePeerNotes();
+	}
+
+	int PeerNotesRevision() {
+		return PeerNotesRevisionRef();
+	}
+
+	QString PeerNotePrefix(not_null<PeerData*> peer) {
+		const auto note = PeerNote(peer->id.value);
+		if (note.isEmpty()) {
+			return QString();
+		}
+		return QString::fromUtf8("〔") + note + QString::fromUtf8("〕 ");
 	}
 
 	void Manager::writeDefaultFile() {

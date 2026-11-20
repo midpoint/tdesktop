@@ -42,6 +42,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/create_poll_box.h"
 #include "boxes/edit_todo_list_box.h"
 #include "boxes/pin_messages_box.h"
+#include "boxes/peer_note_box.h"
 #include "boxes/premium_limits_box.h"
 #include "boxes/report_messages_box.h"
 #include "boxes/filters/edit_filter_chats_list.h"
@@ -130,6 +131,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_peer_values.h"
 #include "dialogs/dialogs_key.h"
 #include "core/application.h"
+#include "core/enhanced_settings.h"
 #include "core/ui_integration.h"
 #include "export/export_manager.h"
 #include "boxes/peers/edit_participants_box.h"
@@ -322,6 +324,7 @@ private:
 	void addToggleMuteSubmenu(bool addSeparator);
 	void addSupportInfo();
 	void addInfo();
+	void addPeerNote();
 	void addStoryArchive();
 	void addNewWindow(bool addSeparator = true);
 	void addUngroup();
@@ -672,6 +675,26 @@ void Filler::addInfo() {
 			}
 		}
 	}, infoPeer->isUser() ? &st::menuIconProfile : &st::menuIconInfo);
+}
+
+void Filler::addPeerNote() {
+	if (!_peer || (!_peer->isChannel() && !_peer->isMegagroup())) {
+		return;
+	}
+	const auto peer = _peer;
+	const auto controller = _controller;
+	const auto weak = base::make_weak(peer);
+	const auto hasNote = !EnhancedSettings::PeerNote(peer->id.value).isEmpty();
+	_addAction(
+		hasNote
+			? tr::lng_peer_note_edit(tr::now)
+			: tr::lng_peer_note_set(tr::now),
+		[=] {
+			if (const auto strong = weak.get()) {
+				ShowPeerNoteBox(controller, strong);
+			}
+		},
+		&st::menuIconEdit);
 }
 
 void Filler::addStoryArchive() {
@@ -1984,6 +2007,7 @@ void Filler::fillContextMenuActions() {
 	addUngroup();
 	addHidePromotion();
 	addInfo();
+	addPeerNote();
 	addToggleArchive();
 	addTogglePin();
 	//if (ViewProfileInChatsListContextMenu.value()) {
@@ -2009,6 +2033,7 @@ void Filler::fillHistoryActions() {
 	addToggleMuteSubmenu(true);
 	addCreateTopic();
 	addInfo();
+	addPeerNote();
 	addViewAsTopics();
 	addManageChat();
 	addStoryArchive();

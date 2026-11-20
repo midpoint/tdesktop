@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/dialogs_row.h"
 
+#include "core/enhanced_settings.h"
 #include "ui/chat/chat_theme.h" // CountAverageColor.
 #include "ui/color_contrast.h"
 #include "ui/effects/credits_graphics.h"
@@ -995,7 +996,7 @@ const Ui::Text::String &FakeRow::name() const {
 		const auto peer = from ? from : _item->history()->peer.get();
 		_name.setText(
 			st::semiboldTextStyle,
-			peer->name(),
+			EnhancedSettings::PeerNotePrefix(peer) + peer->name(),
 			Ui::NameTextOptions());
 	}
 	return _name;

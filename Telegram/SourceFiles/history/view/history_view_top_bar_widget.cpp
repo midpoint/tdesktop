@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/shortcuts.h"
 #include "core/application.h"
 #include "core/core_settings.h"
+#include "core/enhanced_settings.h"
 #include "ui/controls/userpic_button.h"
 #include "ui/wrap/fade_wrap.h"
 #include "ui/widgets/buttons.h"
@@ -689,11 +690,15 @@ void TopBarWidget::paintTopBar(Painter &p) {
 			paintStatus(p, statusleft, statustop, statuswidth, width());
 		}
 	} else if (namePeer) {
-		if (_titleNameVersion < namePeer->nameVersion()) {
+		const auto notesRevision = EnhancedSettings::PeerNotesRevision();
+		if (_titleNameVersion < namePeer->nameVersion()
+			|| _peerNotesRevision != notesRevision) {
 			_titleNameVersion = namePeer->nameVersion();
+			_peerNotesRevision = notesRevision;
 			_title.setText(
 				st::msgNameStyle,
-				TopBarNameText(namePeer, _activeChat),
+				EnhancedSettings::PeerNotePrefix(namePeer)
+					+ TopBarNameText(namePeer, _activeChat),
 				Ui::NameTextOptions());
 		}
 		if (const auto info = namePeer->botVerifyDetails()) {

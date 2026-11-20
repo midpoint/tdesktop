@@ -216,6 +216,7 @@ private:
 	mutable Ui::Text::String _chatListNameText;
 	mutable int _chatListNameVersion = 0;
 	mutable bool _previousMode;
+	mutable int _peerNotesRevision = -1;
 	mutable DateTextCache _chatListDateCache;
 	TimeId _timeId = 0;
 	Flags _flags;

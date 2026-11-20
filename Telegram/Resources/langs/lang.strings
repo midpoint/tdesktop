@@ -9296,4 +9296,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_group_requests_ban" = "Ban";
 
 "lng_blocked_user_hint" = "[Blocked User Message]\n";
+
+"lng_peer_note_set" = "设置注释";
+"lng_peer_note_edit" = "编辑注释";
+"lng_peer_note_title" = "频道注释";
+"lng_peer_note_placeholder" = "例如：科技新闻";
 // Keys finished
