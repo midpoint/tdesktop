@@ -683,16 +683,13 @@ void Filler::addPeerNote() {
 	}
 	const auto peer = _peer;
 	const auto controller = _controller;
-	const auto weak = base::make_weak(peer);
 	const auto hasNote = !EnhancedSettings::PeerNote(peer->id.value).isEmpty();
 	_addAction(
 		hasNote
 			? tr::lng_peer_note_edit(tr::now)
 			: tr::lng_peer_note_set(tr::now),
 		[=] {
-			if (const auto strong = weak.get()) {
-				ShowPeerNoteBox(controller, strong);
-			}
+			ShowPeerNoteBox(controller, peer);
 		},
 		&st::menuIconEdit);
 }

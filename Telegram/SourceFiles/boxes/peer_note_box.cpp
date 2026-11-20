@@ -6,7 +6,6 @@ https://github.com/TDesktop-x64/tdesktop/blob/dev/LEGAL
 */
 #include "boxes/peer_note_box.h"
 
-#include "base/weak_ptr.h"
 #include "core/enhanced_settings.h"
 #include "data/data_changes.h"
 #include "data/data_peer.h"
@@ -28,7 +27,6 @@ constexpr auto kPeerNoteLimit = 30;
 void ShowPeerNoteBox(
 		not_null<Window::SessionController*> controller,
 		not_null<PeerData*> peer) {
-	const auto weak = base::make_weak(peer.get());
 	const auto current = EnhancedSettings::PeerNote(peer->id.value);
 	controller->uiShow()->showBox(Box([=](not_null<Ui::GenericBox*> box) {
 		box->setTitle(tr::lng_peer_note_title());
@@ -45,15 +43,11 @@ void ShowPeerNoteBox(
 		field->setMaxLength(kPeerNoteLimit);
 
 		const auto submit = [=] {
-			const auto strong = weak.get();
-			if (!strong) {
-				return;
-			}
 			EnhancedSettings::SetPeerNote(
-				strong->id.value,
+				peer->id.value,
 				field->getLastText());
-			strong->session().changes().peerUpdated(
-				strong,
+			peer->session().changes().peerUpdated(
+				peer,
 				Data::PeerUpdate::Flag::Name);
 			box->closeBox();
 		};

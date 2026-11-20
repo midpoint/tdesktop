@@ -167,7 +167,7 @@ namespace EnhancedSettings {
 				return;
 			}
 			const auto object = doc.object();
-			for (auto i = object.cbegin(); i != object.cend(); ++i) {
+			for (auto i = object.constBegin(), e = object.constEnd(); i != e; ++i) {
 				auto ok = false;
 				const auto id = i.key().toULongLong(&ok);
 				if (!ok || !id) {
