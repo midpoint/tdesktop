@@ -10,7 +10,16 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_app_config.h"
 #include "main/main_session.h"
 
+#include <algorithm>
+
 namespace Data {
+
+namespace {
+
+// 64Gram: raise chat folders limit above the official 10/30; adjust here.
+constexpr auto kChatFoldersLimit = 100;
+
+} // namespace
 
 PremiumLimits::PremiumLimits(not_null<Main::Session*> session)
 : _session(session) {
@@ -55,10 +64,14 @@ int PremiumLimits::stickersFavedCurrent() const {
 }
 
 int PremiumLimits::dialogFiltersDefault() const {
-	return appConfigLimit("dialog_filters_limit_default", 10);
+	return std::max(
+		kChatFoldersLimit,
+		appConfigLimit("dialog_filters_limit_default", 10));
 }
 int PremiumLimits::dialogFiltersPremium() const {
-	return appConfigLimit("dialog_filters_limit_premium", 30);
+	return std::max(
+		kChatFoldersLimit,
+		appConfigLimit("dialog_filters_limit_premium", 30));
 }
 int PremiumLimits::dialogFiltersCurrent() const {
 	return isPremium()
