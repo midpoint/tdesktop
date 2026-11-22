@@ -168,11 +168,9 @@ void ChangeFilterById(
 		const auto was = *i;
 		const auto filter = ChangedFilter(was, history, add);
 		history->owner().chatsFilters().set(filter);
-		history->session().api().request(MTPmessages_UpdateDialogFilter(
-			MTP_flags(MTPmessages_UpdateDialogFilter::Flag::f_filter),
-			MTP_int(filter.id()),
-			filter.tl()
-		)).done([=, chat = history->peer->name(), name = filter.title()] {
+		const auto showToast = [=,
+				chat = history->peer->name(),
+				name = filter.title()] {
 			const auto account = not_null(&history->session().account());
 			if (const auto controller = Core::App().windowFor(account)) {
 				const auto isStatic = name.isStatic;
@@ -192,6 +190,17 @@ void ChangeFilterById(
 					}),
 				});
 			}
+		};
+		if (Data::ChatFilters::IsLocalId(filterId)) {
+			showToast();
+			return;
+		}
+		history->session().api().request(MTPmessages_UpdateDialogFilter(
+			MTP_flags(MTPmessages_UpdateDialogFilter::Flag::f_filter),
+			MTP_int(filter.id()),
+			filter.tl()
+		)).done([=] {
+			showToast();
 		}).fail([=](const MTP::Error &error) {
 			LOG(("API Error: failed to %1 a dialog to a folder. %2")
 				.arg(add ? u"add"_q : u"remove"_q)
@@ -353,7 +362,7 @@ void FillChooseFilterMenu(
 	}
 
 	const auto limit = [session = &controller->session()] {
-		return Data::PremiumLimits(session).dialogFiltersCurrent();
+		return Data::PremiumLimits(session).dialogFiltersUiCurrent();
 	};
 	if ((list.size() - 1) < limit()) {
 		menu->addAction(tr::lng_filters_create(tr::now), [=] {
@@ -367,11 +376,10 @@ void FillChooseFilterMenu(
 				return;
 			}
 			const auto chooseNextId = [&] {
-				auto id = 2;
-				while (ranges::contains(list, id, &Data::ChatFilter::id)) {
-					++id;
-				}
-				return id;
+				const auto &filters = session->data().chatsFilters();
+				return filters.serverFoldersLimitReached()
+					? filters.nextFreeLocalId()
+					: filters.nextFreeServerId();
 			};
 			auto filter =
 				Data::ChatFilter({}, {}, {}, {}, {}, { history }, {}, {});
@@ -380,6 +388,13 @@ void FillChooseFilterMenu(
 					Fn<void(Data::ChatFilter)> next) {
 				const auto updated = filter.withId(
 					filter.id() ? filter.id() : chooseNextId());
+				if (Data::ChatFilters::IsLocalId(updated.id())) {
+					session->data().chatsFilters().set(updated);
+					if (next) {
+						next(updated);
+					}
+					return;
+				}
 				session->api().request(MTPmessages_UpdateDialogFilter(
 					MTP_flags(MTPmessages_UpdateDialogFilter::Flag::f_filter),
 					MTP_int(updated.id()),

@@ -7794,6 +7794,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_filters_checkbox_remove_channel" = "Remove channel from all folders";
 
 "lng_filters_link_create" = "Create an Invite Link";
+"lng_filters_local_link_unsupported" = "本地文件夹不支持分享链接";
 "lng_filters_link_cant" = "You can’t share folders which include or exclude specific chat types like 'Groups', 'Contacts', etc.";
 "lng_filters_link_about" = "Share access to some of this folder's groups and channels with others.";
 "lng_filters_link_about_many" = "Create more links to set up different access levels for different people.";

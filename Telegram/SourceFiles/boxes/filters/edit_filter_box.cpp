@@ -1051,6 +1051,10 @@ void EditFilterBox(
 		if (!result || !GoodForExportFilterLink(window, *result)) {
 			return;
 		}
+		if (result->id() && Data::ChatFilters::IsLocalId(result->id())) {
+			window->showToast(tr::lng_filters_local_link_unsupported(tr::now));
+			return;
+		}
 		const auto shared = CollectFilterLinkChats(*result);
 		if (shared.empty()) {
 			window->show(ShowLinkBox(window, *result, {}));
@@ -1062,6 +1066,11 @@ void EditFilterBox(
 			// Comparison of ChatFilter-s don't take id into account!
 			data->force_assign(updated);
 			const auto id = updated.id();
+			if (Data::ChatFilters::IsLocalId(id)) {
+				window->showToast(
+					tr::lng_filters_local_link_unsupported(tr::now));
+				return;
+			}
 			state->links = owner->chatsFilters().chatlistLinks(id);
 			ExportFilterLink(id, shared, crl::guard(box, [=](
 					Data::ChatFilterLink link) {
@@ -1157,6 +1166,9 @@ void EditExistingFilter(
 			MTP_flags(MTPDupdateDialogFilter::Flag::f_filter),
 			MTP_int(id),
 			tl));
+		if (Data::ChatFilters::IsLocalId(id)) {
+			return;
+		}
 		session->api().request(MTPmessages_UpdateDialogFilter(
 			MTP_flags(MTPmessages_UpdateDialogFilter::Flag::f_filter),
 			MTP_int(id),

@@ -366,6 +366,33 @@ namespace EnhancedSettings {
 		return QString::fromUtf8("〔") + note + QString::fromUtf8("〕 ");
 	}
 
+	namespace {
+
+		QString LocalFoldersFilePath(uint64 accountId) {
+			return cWorkingDir()
+				+ qsl("tdata/local_folders_")
+				+ QString::number(accountId)
+				+ qsl(".json");
+		}
+
+	} // namespace
+
+	QByteArray LocalFoldersJson(uint64 accountId) {
+		auto file = QFile(LocalFoldersFilePath(accountId));
+		if (!file.open(QIODevice::ReadOnly)) {
+			return {};
+		}
+		return file.readAll();
+	}
+
+	void SetLocalFoldersJson(uint64 accountId, const QByteArray &json) {
+		auto file = QFile(LocalFoldersFilePath(accountId));
+		if (!file.open(QIODevice::WriteOnly)) {
+			return;
+		}
+		file.write(json);
+	}
+
 	void Manager::writeDefaultFile() {
 		auto file = QFile(DefaultFilePath());
 		if (!file.open(QIODevice::WriteOnly)) {

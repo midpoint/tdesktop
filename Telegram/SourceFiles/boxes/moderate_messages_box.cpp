@@ -447,6 +447,9 @@ void RemoveChatFromFilters(not_null<PeerData*> peer) {
 			MTP_flags(MTPDupdateDialogFilter::Flag::f_filter),
 			MTP_int(filter.id()),
 			tl));
+		if (Data::ChatFilters::IsLocalId(filter.id())) {
+			continue;
+		}
 		peer->session().api().request(MTPmessages_UpdateDialogFilter(
 			MTP_flags(MTPmessages_UpdateDialogFilter::Flag::f_filter),
 			MTP_int(filter.id()),

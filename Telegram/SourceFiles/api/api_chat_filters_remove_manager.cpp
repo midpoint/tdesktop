@@ -32,6 +32,9 @@ void RemoveChatFilter(
 		MTP_flags(MTPDupdateDialogFilter::Flag(0)),
 		MTP_int(filterId),
 		MTPDialogFilter()));
+	if (Data::ChatFilters::IsLocalId(filterId)) {
+		return;
+	}
 	if (leave.empty()) {
 		api->request(MTPmessages_UpdateDialogFilter(
 			MTP_flags(MTPmessages_UpdateDialogFilter::Flag(0)),

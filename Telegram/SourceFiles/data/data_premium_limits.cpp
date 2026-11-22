@@ -16,7 +16,6 @@ namespace Data {
 
 namespace {
 
-// 64Gram: raise chat folders limit above the official 10/30; adjust here.
 constexpr auto kChatFoldersLimit = 100;
 
 } // namespace
@@ -64,19 +63,18 @@ int PremiumLimits::stickersFavedCurrent() const {
 }
 
 int PremiumLimits::dialogFiltersDefault() const {
-	return std::max(
-		kChatFoldersLimit,
-		appConfigLimit("dialog_filters_limit_default", 10));
+	return appConfigLimit("dialog_filters_limit_default", 10);
 }
 int PremiumLimits::dialogFiltersPremium() const {
-	return std::max(
-		kChatFoldersLimit,
-		appConfigLimit("dialog_filters_limit_premium", 30));
+	return appConfigLimit("dialog_filters_limit_premium", 30);
 }
 int PremiumLimits::dialogFiltersCurrent() const {
 	return isPremium()
 		? dialogFiltersPremium()
 		: dialogFiltersDefault();
+}
+int PremiumLimits::dialogFiltersUiCurrent() const {
+	return std::max(kChatFoldersLimit, dialogFiltersCurrent());
 }
 
 int PremiumLimits::dialogShareableFiltersDefault() const {

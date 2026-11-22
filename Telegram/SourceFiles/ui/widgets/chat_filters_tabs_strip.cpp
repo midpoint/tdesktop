@@ -148,7 +148,7 @@ void ShowFiltersListMenu(
 
 	const auto reorderAll = session->user()->isPremium();
 	const auto maxLimit = (reorderAll ? 1 : 0)
-		+ Data::PremiumLimits(session).dialogFiltersCurrent();
+		+ Data::PremiumLimits(session).dialogFiltersUiCurrent();
 	const auto premiumFrom = (reorderAll ? 0 : 1) + maxLimit;
 
 	for (auto i = 0; i < list.size(); ++i) {
@@ -411,7 +411,7 @@ not_null<Ui::RpWidget*> AddChatFiltersTabsStrip(
 		{
 			const auto reorderAll = session->user()->isPremium();
 			const auto maxLimit = (reorderAll ? 1 : 0)
-				+ Data::PremiumLimits(session).dialogFiltersCurrent();
+				+ Data::PremiumLimits(session).dialogFiltersUiCurrent();
 			const auto premiumFrom = (reorderAll ? 0 : 1) + maxLimit;
 			slider->setLockedFrom((premiumFrom >= list.size())
 				? 0

@@ -361,7 +361,7 @@ void FiltersMenu::refresh() {
 
 	_reorder->clearPinnedIntervals();
 	const auto maxLimit = (reorderAll ? 1 : 0)
-		+ Data::PremiumLimits(&_session->session()).dialogFiltersCurrent();
+		+ Data::PremiumLimits(&_session->session()).dialogFiltersUiCurrent();
 	const auto premiumFrom = (reorderAll ? 0 : 1) + maxLimit;
 	if (!reorderAll && !GetEnhancedBool("hide_all_chats")) {
 		_reorder->addPinnedInterval(0, 1);

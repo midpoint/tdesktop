@@ -410,7 +410,7 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 	const auto weak = base::make_weak(container);
 	const auto session = &controller->session();
 	const auto limit = [=] {
-		return Data::PremiumLimits(session).dialogFiltersCurrent();
+		return Data::PremiumLimits(session).dialogFiltersUiCurrent();
 	};
 
 	const auto find = [=](not_null<FilterRowButton*> button) {
@@ -608,14 +608,30 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 
 	const auto prepareGoodIdsForNewFilters = [=] {
 		const auto &list = session->data().chatsFilters().list();
-
-		auto localId = 1;
-		const auto chooseNextId = [&] {
-			++localId;
-			while (ranges::contains(list, localId, &Data::ChatFilter::id)) {
-				++localId;
+		const auto serverLimit = Data::PremiumLimits(session)
+			.dialogFiltersCurrent();
+		auto serverCount = 0;
+		for (const auto &row : state->rows) {
+			const auto id = row.filter.id();
+			if (!row.removed
+				&& id
+				&& !Data::ChatFilters::IsLocalId(id)
+				&& ranges::contains(list, id, &Data::ChatFilter::id)) {
+				++serverCount;
 			}
-			return localId;
+		}
+
+		auto used = base::flat_set<FilterId>();
+		const auto chooseNextId = [&](bool server) {
+			auto id = server
+				? FilterId(1)
+				: (Data::ChatFilters::kLocalIdStart - 1);
+			do {
+				++id;
+			} while (ranges::contains(list, id, &Data::ChatFilter::id)
+				|| used.contains(id));
+			used.insert(id);
+			return id;
 		};
 		auto result = base::flat_map<not_null<FilterRowButton*>, FilterId>();
 		for (auto &row : state->rows) {
@@ -624,7 +640,11 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 				continue;
 			} else if (!id
 				|| !ranges::contains(list, id, &Data::ChatFilter::id)) {
-				result.emplace(row.button, chooseNextId());
+				const auto server = (serverCount < serverLimit);
+				if (server) {
+					++serverCount;
+				}
+				result.emplace(row.button, chooseNextId(server));
 			}
 		}
 		return result;
@@ -667,6 +687,7 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 					updated = row.filter;
 				}
 			}
+			const auto local = Data::ChatFilters::IsLocalId(newId);
 			const auto tl = removed
 				? MTPDialogFilter()
 				: row.filter.tl(newId);
@@ -683,7 +704,7 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 					MTPchatlists_LeaveChatlist(
 						MTP_inputChatlistDialogFilter(MTP_int(newId)),
 						MTP_vector<MTPInputPeer>(std::move(inputs))));
-			} else {
+			} else if (!local) {
 				const auto request = MTPmessages_UpdateDialogFilter(
 					MTP_flags(removed
 						? MTPmessages_UpdateDialogFilter::Flag(0)
@@ -696,6 +717,8 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 					addRequests.push_back(request);
 					order.push_back(newId);
 				}
+			} else if (!removed) {
+				order.push_back(newId);
 			}
 			updates.push_back(MTP_updateDialogFilter(
 				MTP_flags(removed
@@ -790,7 +813,7 @@ void SetupRecommendedSection(
 		not_null<Ui::VerticalLayout*> filtersWrap) {
 	const auto session = &controller->session();
 	const auto limit = [=] {
-		return Data::PremiumLimits(session).dialogFiltersCurrent();
+		return Data::PremiumLimits(session).dialogFiltersUiCurrent();
 	};
 
 	const auto showLimitReached = [=] {

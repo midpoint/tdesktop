@@ -8,6 +8,7 @@ https://github.com/TDesktop-x64/tdesktop/blob/dev/LEGAL
 
 #include "base/basic_types.h"
 
+#include <QtCore/QByteArray>
 #include <QtCore/QTimer>
 
 class PeerData;
@@ -62,4 +63,8 @@ namespace EnhancedSettings {
 
 	QString PeerNotePrefix(not_null<PeerData*> peer);
 
+	// Local chat folders storage, tdata/local_folders_<account>.json.
+	QByteArray LocalFoldersJson(uint64 accountId);
+
+	void SetLocalFoldersJson(uint64 accountId, const QByteArray &json);
 } // namespace EnhancedSettings

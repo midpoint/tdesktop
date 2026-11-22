@@ -4383,7 +4383,7 @@ bool CheckAndJumpToNearChatsFilter(
 	if (changed >= int(list->size()) || changed < 0) {
 		return false;
 	}
-	if (changed > Data::PremiumLimits(session).dialogFiltersCurrent()) {
+	if (changed > Data::PremiumLimits(session).dialogFiltersUiCurrent()) {
 		return false;
 	}
 	if (jump) {

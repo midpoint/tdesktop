@@ -76,6 +76,7 @@ public:
 	[[nodiscard]] ChatFilter withChatlist(
 		bool chatlist,
 		bool hasMyLinks) const;
+	[[nodiscard]] ChatFilter withoutChatlist() const;
 	[[nodiscard]] ChatFilter withoutAlways(not_null<History*>) const;
 
 	[[nodiscard]] static ChatFilter FromTL(
@@ -148,8 +149,12 @@ struct TagColorChanged final {
 
 class ChatFilters final {
 public:
+	static constexpr auto kLocalIdStart = FilterId(1000000);
+
 	explicit ChatFilters(not_null<Session*> owner);
 	~ChatFilters();
+
+	[[nodiscard]] static bool IsLocalId(FilterId id);
 
 	void setPreloaded(
 		const QVector<MTPDialogFilter> &result,
@@ -161,6 +166,13 @@ public:
 	void set(ChatFilter filter);
 	void remove(FilterId id);
 	void moveAllToFront();
+
+	[[nodiscard]] bool serverFoldersLimitReached() const;
+	[[nodiscard]] FilterId nextFreeServerId(
+		base::flat_set<FilterId> skip = {}) const;
+	[[nodiscard]] FilterId nextFreeLocalId(
+		base::flat_set<FilterId> skip = {}) const;
+
 	[[nodiscard]] const std::vector<ChatFilter> &list() const;
 	[[nodiscard]] rpl::producer<> changed() const;
 	[[nodiscard]] rpl::producer<FilterId> isChatlistChanged() const;
@@ -236,12 +248,18 @@ private:
 	void applyInsert(ChatFilter filter, int position);
 	void applyRemove(int position);
 
+	void loadLocal();
+	void saveLocal();
+	void reorderLocal(const std::vector<FilterId> &order);
+
 	void checkLoadMoreChatsLists();
 	void loadMoreChatsList(FilterId id);
 
 	const not_null<Session*> _owner;
 
 	std::vector<ChatFilter> _list;
+	std::vector<ChatFilter> _localFilters;
+	bool _localLoaded = false;
 	base::flat_map<FilterId, std::unique_ptr<Dialogs::MainList>> _chatsLists;
 	rpl::event_stream<> _listChanged;
 	rpl::event_stream<FilterId> _isChatlistChanged;
