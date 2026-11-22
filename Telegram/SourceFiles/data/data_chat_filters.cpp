@@ -1182,6 +1182,7 @@ void ChatFilters::saveOrder(
 			localOrder.push_back(MTP_int(filter.id()));
 		}
 	}
+	// Server order request carries only real ids, local ones stay in the list.
 	applyOrder(localOrder);
 	reorderLocal(order);
 
