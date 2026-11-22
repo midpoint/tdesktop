@@ -375,7 +375,7 @@ void FillChooseFilterMenu(
 			if ((list.size() - 1) >= limit()) {
 				return;
 			}
-			const auto chooseNextId = [&] {
+			const auto chooseNextId = [session] {
 				const auto &filters = session->data().chatsFilters();
 				return filters.serverFoldersLimitReached()
 					? filters.nextFreeLocalId()

@@ -756,7 +756,7 @@ bool ChatFilters::serverFoldersLimitReached() const {
 			++count;
 		}
 	}
-	return count >= Data::PremiumLimits(_owner->session())
+	return count >= Data::PremiumLimits(&_owner->session())
 		.dialogFiltersCurrent();
 }
 
