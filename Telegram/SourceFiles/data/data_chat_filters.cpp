@@ -793,7 +793,7 @@ void ChatFilters::apply(const MTPUpdate &update) {
 		} else {
 			remove(data.vid().v);
 		}
-	}, [&](const MTPDupdateDialogFilters &data) {
+	}, [&](const MTPDupdateDialogFilters &) {
 		load(true);
 	}, [&](const MTPDupdateDialogFilterOrder &data) {
 		loadLocal();
