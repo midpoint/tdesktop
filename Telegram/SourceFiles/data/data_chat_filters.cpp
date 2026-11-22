@@ -1182,7 +1182,7 @@ void ChatFilters::saveOrder(
 			localOrder.push_back(MTP_int(filter.id()));
 		}
 	}
-	applyOrder(MTP_vector<MTPint>(localOrder));
+	applyOrder(localOrder);
 	reorderLocal(order);
 
 	if (ids.isEmpty()) {
