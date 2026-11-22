@@ -16,6 +16,10 @@ if (DESKTOP_APP_USE_PACKAGED)
     endif()
 endif()
 
+# CMake 4.5 warns on zstd's non-target directives; -Werror=dev makes it fatal.
+if (CMAKE_VERSION VERSION_GREATER_EQUAL 4.5)
+    cmake_diagnostic(DEMOTE CMD_NON_TARGET_DIRECTIVE WARN)
+endif()
 include(FetchContent)
 set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
 set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -42,10 +46,6 @@ block(SCOPE_FOR VARIABLES)
     # An empty can_fetch lets CMake 3.31's Git update script choose its default.
     if (NOT DEFINED can_fetch)
         set(can_fetch "")
-    endif()
-    # CMake 4.5 warns on zstd's non-target directives; -Werror=dev makes it fatal.
-    if (CMAKE_VERSION VERSION_GREATER_EQUAL 4.5)
-        cmake_diagnostic(DEMOTE CMD_NON_TARGET_DIRECTIVE WARN)
     endif()
     FetchContent_MakeAvailable(update_zstd)
     if (CMAKE_C_COMPILER_ARG1 AND CMAKE_ASM_COMPILER STREQUAL CMAKE_C_COMPILER)
