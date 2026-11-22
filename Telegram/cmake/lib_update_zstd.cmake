@@ -43,6 +43,10 @@ block(SCOPE_FOR VARIABLES)
     if (NOT DEFINED can_fetch)
         set(can_fetch "")
     endif()
+    # CMake 4.5 warns on zstd's non-target directives; -Werror=dev makes it fatal.
+    if (CMAKE_VERSION VERSION_GREATER_EQUAL 4.5)
+        cmake_diagnostic(DEMOTE CMD_NON_TARGET_DIRECTIVE WARN)
+    endif()
     FetchContent_MakeAvailable(update_zstd)
     if (CMAKE_C_COMPILER_ARG1 AND CMAKE_ASM_COMPILER STREQUAL CMAKE_C_COMPILER)
         # Compile assembly through the complete C command, including wrappers.
