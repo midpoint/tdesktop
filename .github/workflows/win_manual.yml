@@ -379,32 +379,10 @@ jobs:
           -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT= ^
           -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF ^
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF ^
-          %TDESKTOP_BUILD_DEFINE% > "%GITHUB_WORKSPACE%\build.log" 2>&1
-          if errorlevel 1 (type "%GITHUB_WORKSPACE%\build.log" & exit /b 1)
-          echo === configure ok === >> "%GITHUB_WORKSPACE%\build.log"
+          %TDESKTOP_BUILD_DEFINE%
 
           rem Debug build matches the Debug-only libraries (skip-release above).
-          cmake --build ..\out --config Debug --parallel >> "%GITHUB_WORKSPACE%\build.log" 2>&1
-          set BUILD_CODE=%ERRORLEVEL%
-          type "%GITHUB_WORKSPACE%\build.log"
-          if not "%BUILD_CODE%"=="0" exit /b %BUILD_CODE%
-
-      - name: Report build errors.
-        if: failure()
-        shell: pwsh
-        run: |
-          $log = Join-Path $env:GITHUB_WORKSPACE 'build.log'
-          if (-not (Test-Path $log)) {
-            Write-Host 'No build log was captured.'
-            exit 0
-          }
-          $esc = { param($s) $s.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A') }
-          $tail = (Get-Content $log -Tail 20) -join ' || '
-          Write-Host ("::error title=Build tail::" + (& $esc $tail))
-          $lines = Select-String -Path $log -Pattern 'error C[0-9]+', 'error LNK[0-9]+', 'error MSB[0-9]+', 'CMake Error', 'Traceback', 'FAILED', 'fatal error' | Select-Object -First 8
-          foreach ($line in $lines) {
-            Write-Host ("::error title=Build::" + (& $esc $line.Line))
-          }
+          cmake --build ..\out --config Debug --parallel
 
       - name: Move artifact.
         if: (env.UPLOAD_ARTIFACT == 'true') || (github.ref == 'refs/heads/nightly')
