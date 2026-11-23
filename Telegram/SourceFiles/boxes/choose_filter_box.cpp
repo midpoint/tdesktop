@@ -404,6 +404,16 @@ void FillChooseFilterMenu(
 						next(updated);
 					}
 					session->data().chatsFilters().reload();
+				}).fail([=](const MTP::Error &error) {
+					LOG(("API Error: can't create a folder: %1"
+						).arg(error.type()));
+					const auto &filters = session->data().chatsFilters();
+					const auto local = updated.withId(
+						filters.nextFreeLocalId());
+					session->data().chatsFilters().set(local);
+					if (next) {
+						next(local);
+					}
 				}).send();
 			};
 			const auto send = [=](const Data::ChatFilter &filter) {

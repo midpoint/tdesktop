@@ -22,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "history/history.h"
 #include "lang/lang_keys.h"
+#include "logs.h"
 #include "lottie/lottie_icon.h"
 #include "main/main_session.h"
 #include "settings/sections/settings_main.h"
@@ -659,7 +660,12 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 
 		auto order = std::vector<FilterId>();
 		auto updates = std::vector<MTPUpdate>();
-		auto addRequests = std::vector<MTPmessages_UpdateDialogFilter>();
+		struct CreateRequest {
+			MTPmessages_UpdateDialogFilter request;
+			Data::ChatFilter filter;
+			FilterRowButton *button = nullptr;
+		};
+		auto createRequests = std::vector<CreateRequest>();
 		auto removeRequests = std::vector<MTPmessages_UpdateDialogFilter>();
 		auto removeChatlistRequests = std::vector<MTPchatlists_LeaveChatlist>();
 
@@ -714,7 +720,10 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 				if (removed) {
 					removeRequests.push_back(request);
 				} else {
-					addRequests.push_back(request);
+					createRequests.push_back({
+						request,
+						row.filter,
+						row.button.get() });
 					order.push_back(newId);
 				}
 			} else if (!removed) {
@@ -753,11 +762,12 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 		}
 		crl::on_main(session, [
 			session,
+			state,
 			next,
 			updated,
 			order = std::move(order),
 			updates = std::move(updates),
-			addRequests = std::move(addRequests),
+			createRequests = std::move(createRequests),
 			removeRequests = std::move(removeRequests),
 			removeChatlistRequests = std::move(removeChatlistRequests)
 		] {
@@ -766,10 +776,17 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 			const auto ids = std::make_shared<
 				base::flat_set<mtpRequestId>
 			>();
+			const auto converted = std::make_shared<
+				base::flat_map<FilterId, FilterId>
+			>();
 			const auto checkFinished = [=] {
 				if (ids->empty() && next) {
-					Assert(updated.id() != 0);
-					next(updated);
+					const auto i = converted->find(updated.id());
+					const auto filter = (i != converted->end())
+						? updated.withId(i->second)
+						: updated;
+					Assert(filter.id() != 0);
+					next(filter);
 				}
 			};
 			for (const auto &update : updates) {
@@ -794,8 +811,63 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 			};
 			sendRequests(removeRequests);
 			sendRequests(removeChatlistRequests);
-			sendRequests(addRequests);
-			if (!order.empty() && !addRequests.empty()) {
+			struct CreateRequestState {
+				Data::ChatFilter filter;
+				FilterRowButton *button = nullptr;
+				mtpRequestId requestId = 0;
+			};
+			for (auto &created : createRequests) {
+				const auto context = std::make_shared<CreateRequestState>(
+					CreateRequestState{
+						.filter = std::move(created.filter),
+						.button = created.button,
+					});
+				previousId = api->request(
+					std::move(created.request)
+				).done([=](const auto &result, mtpRequestId id) {
+					if constexpr (std::is_same_v<
+							std::decay_t<decltype(result)>,
+							MTPUpdates>) {
+						session->api().applyUpdates(result);
+					}
+					ids->remove(id);
+					checkFinished();
+				}).fail([=](const MTP::Error &error) {
+					LOG(("API Error: can't create a folder: %1"
+						).arg(error.type()));
+					const auto id = context->filter.id();
+					if (ranges::contains(
+							filters->list(),
+							id,
+							&Data::ChatFilter::id)) {
+						filters->remove(id);
+					}
+					auto local = context->filter.withId(
+						filters->nextFreeLocalId());
+					const auto localId = local.id();
+					filters->set(std::move(local));
+					converted->emplace(id, localId);
+					if (const auto button = context->button) {
+						crl::guard(button, [=] {
+							const auto i = ranges::find(
+								state->rows,
+								button,
+								[](const FilterRow &row) {
+									return row.button.get();
+								});
+							if (i != end(state->rows)) {
+								i->filter = i->filter.withId(localId);
+								button->updateData(i->filter);
+							}
+						});
+					}
+					ids->remove(context->requestId);
+					checkFinished();
+				}).afterRequest(previousId).send();
+				context->requestId = previousId;
+				ids->emplace(previousId);
+			}
+			if (!order.empty() && !createRequests.empty()) {
 				filters->saveOrder(order, previousId);
 			}
 			checkFinished();
